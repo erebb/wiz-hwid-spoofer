@@ -81,7 +81,7 @@ HANDLE(__stdcall* o_CreateFileA)(LPCSTR                lpFileName,
 	DWORD                 dwFlagsAndAttributes,
 	HANDLE                hTemplateFile);
 
-// uuid is read from C:\ProgramData\KingsIsle Entertainment\Wizard101\Data:CRC NTFS exploit
+// uuid is read from C:\ProgramData\KingsIsle Entertainment\Wizard101\Data:CRC windows data stream
 
 HANDLE __stdcall CreateFileA_h(LPCSTR lpFileName,
 	DWORD                 dwDesiredAccess,
