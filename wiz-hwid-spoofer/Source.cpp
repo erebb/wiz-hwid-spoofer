@@ -51,6 +51,15 @@ INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         GlobalDeleteAtom(injected);
         MessageBoxA(nullptr, std::to_string(GetLastError()).c_str(), "", 0);
     }
+
+    std::thread inject_thread([]
+        {
+            while (true) {
+                check_and_inject();
+                std::this_thread::sleep_for(std::chrono::duration(std::chrono::milliseconds(50)));
+            }
+        });
+    inject_thread.detach();
 	
     WNDCLASSEX wc = { sizeof(WNDCLASSEX), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, _T("ImGui Example"), nullptr };
     ::RegisterClassEx(&wc);
@@ -170,18 +179,6 @@ INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                     });
                 wiz.detach();
             }
-        	
-            if (spoof_enabled)
-            {
-                if (!GlobalFindAtomA("ClipboardRootDataObject")) {
-                    ImGui::TextColored(ImVec4(0.0f, 1.0f, 1.0f, 1.00f), "Waiting for Wizard101... (using more cpu to look for process)");
-                    check_and_inject();
-                }
-                else
-                {
-                    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.00f), "Actively Spoofing!");
-                }
-            } 
         }
 
         ImGui::Render();
@@ -190,7 +187,14 @@ INT WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         g_pd3dDeviceContext->ClearRenderTargetView(g_mainRenderTargetView, clear_color_with_alpha);
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
-        g_pSwapChain->Present(1, 0);
+        static UINT presentFlags = 0;
+        if (g_pSwapChain->Present(1, presentFlags) == DXGI_STATUS_OCCLUDED) {
+            presentFlags = DXGI_PRESENT_TEST;
+            Sleep(20);
+        }
+        else {
+            presentFlags = 0;
+        }
     }
 
     ImGui_ImplDX11_Shutdown();
