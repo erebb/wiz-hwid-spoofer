@@ -1,4 +1,0 @@
-﻿  Tests.cpp
-C:\Users\b\source\repos\w101_identifiers\w101_identifiers\AdapterInfo.hpp(22,28): warning C4018: '<': signed/unsigned mismatch
-C:\Users\b\source\repos\w101_identifiers\w101_identifiers\Tests.cpp(3,13): warning C4326: return type of 'main' should be 'int' instead of 'void'
-  w101_identifiers.vcxproj -> C:\Users\b\source\repos\w101_identifiers\Debug\w101_identifiers.exe
