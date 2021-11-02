@@ -1,0 +1,12 @@
+﻿  Tests.cpp
+  The contents of <format> are available only with C++20 concepts support.
+C:\Users\b\source\repos\w101_identifiers\w101_identifiers\AdapterInfo.hpp(39,28): warning C4018: '<': signed/unsigned mismatch
+C:\Users\b\source\repos\w101_identifiers\w101_identifiers\AdapterInfo.hpp(40,29): error C2039: 'format': is not a member of 'std'
+B:\VS\VC\Tools\MSVC\14.29.30130\include\random(29): message : see declaration of 'std'
+C:\Users\b\source\repos\w101_identifiers\w101_identifiers\AdapterInfo.hpp(40,35): error C3861: 'format': identifier not found
+C:\Users\b\source\repos\w101_identifiers\w101_identifiers\AdapterInfo.hpp(66,28): warning C4018: '<': signed/unsigned mismatch
+C:\Users\b\source\repos\w101_identifiers\w101_identifiers\Kern32Hooks.hpp(13,10): warning C4200: nonstandard extension used: zero-sized array in struct/union
+C:\Users\b\source\repos\w101_identifiers\w101_identifiers\Kern32Hooks.hpp(13,10): message : This member will be ignored by a defaulted constructor or copy/move assignment operator
+C:\Users\b\source\repos\w101_identifiers\w101_identifiers\Kern32Hooks.hpp(48,24): warning C4018: '<': signed/unsigned mismatch
+C:\Users\b\source\repos\w101_identifiers\w101_identifiers\Kern32Hooks.hpp(87,24): warning C4018: '<': signed/unsigned mismatch
+C:\Users\b\source\repos\w101_identifiers\w101_identifiers\Tests.cpp(6,45): warning C4326: return type of 'main' should be 'int' instead of 'DWORD'

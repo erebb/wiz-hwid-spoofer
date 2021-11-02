@@ -1,0 +1,59 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31423.177
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "w101_identifiers", "w101_identifiers\w101_identifiers.vcxproj", "{4BF4F5B3-BB20-4303-8AD9-AE80E7ACD2D7}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "wiz-launcher-spoofer", "wiz-launcher-spoofer\wiz-launcher-spoofer.vcxproj", "{FE308567-643F-4127-8F90-2C17CC0A9535}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "hwid-spoofer-installer", "hwid-spoofer-installer\hwid-spoofer-installer.vcxproj", "{EB27218D-B8AD-49A3-90AB-ECDC0C8461CF}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "common", "common", "{3FA07284-060A-42D1-83C2-498CA6862300}"
+	ProjectSection(SolutionItems) = preProject
+		common\AdapterInfo.hpp = common\AdapterInfo.hpp
+		common\Config.hpp = common\Config.hpp
+		common\Kern32Hooks.hpp = common\Kern32Hooks.hpp
+		common\toml.h = common\toml.h
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4BF4F5B3-BB20-4303-8AD9-AE80E7ACD2D7}.Debug|x64.ActiveCfg = Debug|x64
+		{4BF4F5B3-BB20-4303-8AD9-AE80E7ACD2D7}.Debug|x64.Build.0 = Debug|x64
+		{4BF4F5B3-BB20-4303-8AD9-AE80E7ACD2D7}.Debug|x86.ActiveCfg = Debug|Win32
+		{4BF4F5B3-BB20-4303-8AD9-AE80E7ACD2D7}.Debug|x86.Build.0 = Debug|Win32
+		{4BF4F5B3-BB20-4303-8AD9-AE80E7ACD2D7}.Release|x64.ActiveCfg = Release|x64
+		{4BF4F5B3-BB20-4303-8AD9-AE80E7ACD2D7}.Release|x64.Build.0 = Release|x64
+		{4BF4F5B3-BB20-4303-8AD9-AE80E7ACD2D7}.Release|x86.ActiveCfg = Release|Win32
+		{4BF4F5B3-BB20-4303-8AD9-AE80E7ACD2D7}.Release|x86.Build.0 = Release|Win32
+		{FE308567-643F-4127-8F90-2C17CC0A9535}.Debug|x64.ActiveCfg = Debug|x64
+		{FE308567-643F-4127-8F90-2C17CC0A9535}.Debug|x64.Build.0 = Debug|x64
+		{FE308567-643F-4127-8F90-2C17CC0A9535}.Debug|x86.ActiveCfg = Debug|Win32
+		{FE308567-643F-4127-8F90-2C17CC0A9535}.Debug|x86.Build.0 = Debug|Win32
+		{FE308567-643F-4127-8F90-2C17CC0A9535}.Release|x64.ActiveCfg = Release|Win32
+		{FE308567-643F-4127-8F90-2C17CC0A9535}.Release|x64.Build.0 = Release|Win32
+		{FE308567-643F-4127-8F90-2C17CC0A9535}.Release|x86.ActiveCfg = Release|Win32
+		{FE308567-643F-4127-8F90-2C17CC0A9535}.Release|x86.Build.0 = Release|Win32
+		{EB27218D-B8AD-49A3-90AB-ECDC0C8461CF}.Debug|x64.ActiveCfg = Debug|x64
+		{EB27218D-B8AD-49A3-90AB-ECDC0C8461CF}.Debug|x64.Build.0 = Debug|x64
+		{EB27218D-B8AD-49A3-90AB-ECDC0C8461CF}.Debug|x86.ActiveCfg = Debug|Win32
+		{EB27218D-B8AD-49A3-90AB-ECDC0C8461CF}.Debug|x86.Build.0 = Debug|Win32
+		{EB27218D-B8AD-49A3-90AB-ECDC0C8461CF}.Release|x64.ActiveCfg = Release|x64
+		{EB27218D-B8AD-49A3-90AB-ECDC0C8461CF}.Release|x64.Build.0 = Release|x64
+		{EB27218D-B8AD-49A3-90AB-ECDC0C8461CF}.Release|x86.ActiveCfg = Release|Win32
+		{EB27218D-B8AD-49A3-90AB-ECDC0C8461CF}.Release|x86.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {028FE08E-E8BD-4744-9B2F-D3E032B3AB0F}
+	EndGlobalSection
+EndGlobal

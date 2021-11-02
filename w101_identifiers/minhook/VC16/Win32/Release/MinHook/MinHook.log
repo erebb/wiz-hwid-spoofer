@@ -1,0 +1,6 @@
+﻿     Creating library C:\Users\b\Videos\minhook-master\minhook-master\build\VC16\bin\Release\MinHook.x86.lib and object C:\Users\b\Videos\minhook-master\minhook-master\build\VC16\bin\Release\MinHook.x86.exp
+  Generating code
+  Previous IPDB not found, fall back to full compilation.
+  All 36 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
+  Finished generating code
+  MinHook.vcxproj -> C:\Users\b\Videos\minhook-master\minhook-master\build\VC16\bin\Release\MinHook.x86.dll

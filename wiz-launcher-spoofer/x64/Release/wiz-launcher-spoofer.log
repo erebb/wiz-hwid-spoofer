@@ -1,0 +1,13 @@
+﻿  Main.cpp
+C:\Users\b\source\repos\w101_identifiers\wiz-launcher-spoofer\Kern32Hooks.hpp(14,13): warning C4200: nonstandard extension used: zero-sized array in struct/union
+C:\Users\b\source\repos\w101_identifiers\wiz-launcher-spoofer\Kern32Hooks.hpp(14,13): message : This member will be ignored by a defaulted constructor or copy/move assignment operator
+C:\Users\b\source\repos\w101_identifiers\wiz-launcher-spoofer\Kern32Hooks.hpp(49,24): warning C4018: '<': signed/unsigned mismatch
+C:\Users\b\source\repos\w101_identifiers\wiz-launcher-spoofer\Kern32Hooks.hpp(88,24): warning C4018: '<': signed/unsigned mismatch
+C:\Users\b\source\repos\w101_identifiers\wiz-launcher-spoofer\AdapterInfo.h(39,28): warning C4018: '<': signed/unsigned mismatch
+C:\Users\b\source\repos\w101_identifiers\wiz-launcher-spoofer\AdapterInfo.h(66,28): warning C4018: '<': signed/unsigned mismatch
+C:\Users\b\source\repos\w101_identifiers\wiz-launcher-spoofer\Main.cpp(5,45): warning C4326: return type of 'main' should be 'int' instead of 'DWORD'
+     Creating library C:\Users\b\source\repos\w101_identifiers\x64\Release\wiz-launcher-spoofer.lib and object C:\Users\b\source\repos\w101_identifiers\x64\Release\wiz-launcher-spoofer.exp
+Main.obj : error LNK2001: unresolved external symbol MH_Initialize
+Main.obj : error LNK2001: unresolved external symbol MH_CreateHook
+Main.obj : error LNK2001: unresolved external symbol MH_EnableHook
+C:\Users\b\source\repos\w101_identifiers\x64\Release\wiz-launcher-spoofer.dll : fatal error LNK1120: 3 unresolved externals
