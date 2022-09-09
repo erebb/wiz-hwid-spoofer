@@ -18,18 +18,7 @@ void delete_uuid()
 	}
 }
 
-void download_dependancies() {
-	if (URLDownloadToFile(NULL, L"https://wizrd.tech/tools/dbghelp.dll", L"dbghelp.dll", BINDF_GETNEWESTVERSION, NULL) != S_OK) {
-		std::cerr << "Failed to download launcher dependancy... send to xgladius#8968 on discord" << std::endl;
-	}
-	if (URLDownloadToFile(NULL, L"https://wizrd.tech/tools/WizardCommandLineCSR.dll", L"WizardCommandLineCSR.dll", BINDF_GETNEWESTVERSION, NULL) != S_OK) {
-		std::cerr << "Failed to download client dependancy... send to xgladius#8968 on discord" << std::endl;
-	}
-}
-
 void main() {
-	download_dependancies();
-
 	if (CopyFile(L"dbghelp.dll", L"C:/ProgramData/KingsIsle Entertainment/Wizard101/PatchClient/BankA/dbghelp.dll", false) == 0) {
 		std::cerr << "Failed to copy launcher dependancy... send to xgladius#8968 on discord: " << GetLastError() << std::endl;
 	}
