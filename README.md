@@ -6,3 +6,4 @@ For launcher spoofing, use a proxy dll (dbghelp.dll) to initialize hooks before 
 For client spoofing, imitate WizardCommandLineCSR.dll to initialize hooks before any api calls
 
 hooks GetAdaptersInfo, GetSystemFirmwareTable, CreateFileA, FreeLibraryA
+add me for files Ern#5599
