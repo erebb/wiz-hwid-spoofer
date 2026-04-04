@@ -78,13 +78,28 @@ WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet \
     "pyperclip>=1.9.0" \
     "thefuzz>=0.22.1"
 
+echo "[setup] wizwalker indiriliyor (Mac git ile)..."
+WIZWALKER_DIR="$DOWNLOAD_DIR/wizwalker"
+WIZSPRINTER_DIR="$DOWNLOAD_DIR/wizsprinter"
+
+if [[ ! -d "$WIZWALKER_DIR" ]]; then
+    git clone --quiet --branch lib-update https://github.com/StarrFox/wizwalker.git "$WIZWALKER_DIR"
+else
+    git -C "$WIZWALKER_DIR" pull --quiet
+fi
+
+echo "[setup] wizsprinter indiriliyor (Mac git ile)..."
+if [[ ! -d "$WIZSPRINTER_DIR" ]]; then
+    git clone --quiet --branch lib-update https://github.com/Deimos-Wizard101/WizSprinter.git "$WIZSPRINTER_DIR"
+else
+    git -C "$WIZSPRINTER_DIR" pull --quiet
+fi
+
 echo "[setup] wizwalker kuruluyor..."
-WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet \
-    "git+https://github.com/StarrFox/wizwalker.git@lib-update"
+WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet "$WIZWALKER_DIR"
 
 echo "[setup] wizsprinter kuruluyor..."
-WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet \
-    "git+https://github.com/Deimos-Wizard101/WizSprinter.git@lib-update"
+WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet "$WIZSPRINTER_DIR"
 
 # ─────────────────────────────────────────────
 # 6. Doğrulama
