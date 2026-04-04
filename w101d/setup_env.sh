@@ -96,13 +96,13 @@ else
 fi
 
 echo "[setup] poetry-core kuruluyor (build backend)..."
-WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet poetry-core
+WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet poetry-core poetry
 
 echo "[setup] wizwalker kuruluyor..."
-WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet "$WIZWALKER_DIR"
+WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet --no-build-isolation "$WIZWALKER_DIR"
 
 echo "[setup] wizsprinter kuruluyor..."
-WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet "$WIZSPRINTER_DIR"
+WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet --no-build-isolation "$WIZSPRINTER_DIR"
 
 # ─────────────────────────────────────────────
 # 6. Doğrulama
