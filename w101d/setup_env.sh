@@ -71,7 +71,7 @@ echo "[setup] Deimos bağımlılıkları kuruluyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet \
     "pywin32>=306" \
     "pypresence>=4.3.0" \
-    "PySimpleGUI==4.60.5" \
+    "PySimpleGUI==4.60.5.1" \
     "loguru>=0.7.2" \
     "pyyaml>=6.0.1" \
     "requests>=2.32.3" \
