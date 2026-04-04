@@ -95,6 +95,9 @@ else
     git -C "$WIZSPRINTER_DIR" pull --quiet
 fi
 
+echo "[setup] poetry-core kuruluyor (build backend)..."
+WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet poetry-core
+
 echo "[setup] wizwalker kuruluyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet "$WIZWALKER_DIR"
 
