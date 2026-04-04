@@ -9,18 +9,27 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/detect_wine.sh"
 
-PYTHON_VERSION="3.11.9"
+PYTHON_VERSION="3.13.3"
 EMBED_ZIP="python-${PYTHON_VERSION}-embed-amd64.zip"
 EMBED_URL="https://www.python.org/ftp/python/${PYTHON_VERSION}/${EMBED_ZIP}"
 GET_PIP_URL="https://bootstrap.pypa.io/get-pip.py"
 DOWNLOAD_DIR="$HOME/.w101d_cache"
 
 # Wine prefix içindeki Python kurulum dizini
-PYTHON_DIR="$WINEPREFIX/drive_c/Python311"
+PYTHON_DIR="$WINEPREFIX/drive_c/Python313"
 WIN_PYTHON="$PYTHON_DIR/python.exe"
 
 # ─────────────────────────────────────────────
-# 1. Embeddable Python zip'i indir
+# 1. Eski Python311 varsa kaldır
+# ─────────────────────────────────────────────
+OLD_PYTHON_DIR="$WINEPREFIX/drive_c/Python311"
+if [[ -d "$OLD_PYTHON_DIR" ]]; then
+    echo "[setup] Eski Python311 siliniyor..."
+    rm -rf "$OLD_PYTHON_DIR"
+fi
+
+# ─────────────────────────────────────────────
+# 2. Embeddable Python zip'i indir
 # ─────────────────────────────────────────────
 mkdir -p "$DOWNLOAD_DIR"
 
@@ -32,7 +41,7 @@ else
 fi
 
 # ─────────────────────────────────────────────
-# 2. Wine prefix içine extract et
+# 3. Wine prefix içine extract et
 # ─────────────────────────────────────────────
 if [[ ! -f "$WIN_PYTHON" ]]; then
     echo "[setup] Python Wine prefix'e extract ediliyor..."
@@ -44,17 +53,17 @@ else
 fi
 
 # ─────────────────────────────────────────────
-# 3. Embeddable Python'da site-packages'i etkinleştir
-#    (python311._pth dosyasında 'import site' satırını aç)
+# 4. Embeddable Python'da site-packages'i etkinleştir
+#    (python313._pth dosyasında 'import site' satırını aç)
 # ─────────────────────────────────────────────
-PTH_FILE="$PYTHON_DIR/python311._pth"
+PTH_FILE="$PYTHON_DIR/python313._pth"
 if [[ -f "$PTH_FILE" ]] && grep -q "^#import site" "$PTH_FILE"; then
     echo "[setup] site-packages etkinleştiriliyor..."
     sed -i '' 's/^#import site/import site/' "$PTH_FILE"
 fi
 
 # ─────────────────────────────────────────────
-# 4. pip kur (get-pip.py ile)
+# 5. pip kur (get-pip.py ile)
 # ─────────────────────────────────────────────
 if [[ ! -f "$DOWNLOAD_DIR/get-pip.py" ]]; then
     echo "[setup] get-pip.py indiriliyor..."
@@ -65,23 +74,32 @@ echo "[setup] pip kuruluyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" "$DOWNLOAD_DIR/get-pip.py" --quiet
 
 # ─────────────────────────────────────────────
-# 5. Deimos bağımlılıklarını kur
+# 6. Build backend'leri kur
+# ─────────────────────────────────────────────
+echo "[setup] build backend'ler kuruluyor (poetry, hatchling)..."
+WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet poetry-core poetry hatchling
+
+# ─────────────────────────────────────────────
+# 7. Deimos bağımlılıklarını kur
 # ─────────────────────────────────────────────
 echo "[setup] Deimos bağımlılıkları kuruluyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet \
     "pywin32>=306" \
     "pypresence>=4.3.0" \
     "PySimpleGUI==4.60.5.1" \
-    "loguru>=0.7.2" \
+    "loguru>=0.5.1,<0.6.0" \
     "pyyaml>=6.0.1" \
     "requests>=2.32.3" \
     "pyperclip>=1.9.0" \
     "thefuzz>=0.22.1"
 
-echo "[setup] wizwalker indiriliyor (Mac git ile)..."
+# ─────────────────────────────────────────────
+# 8. wizwalker ve wizsprinter
+# ─────────────────────────────────────────────
 WIZWALKER_DIR="$DOWNLOAD_DIR/wizwalker"
 WIZSPRINTER_DIR="$DOWNLOAD_DIR/wizsprinter"
 
+echo "[setup] wizwalker indiriliyor (Mac git ile)..."
 if [[ ! -d "$WIZWALKER_DIR" ]]; then
     git clone --quiet https://github.com/StarrFox/wizwalker.git "$WIZWALKER_DIR"
 else
@@ -95,9 +113,6 @@ else
     git -C "$WIZSPRINTER_DIR" pull --quiet
 fi
 
-echo "[setup] build backend'ler kuruluyor (poetry, hatchling)..."
-WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet poetry-core poetry hatchling
-
 echo "[setup] wizwalker kuruluyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet --no-build-isolation "$WIZWALKER_DIR"
 
@@ -105,7 +120,7 @@ echo "[setup] wizsprinter kuruluyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet --no-build-isolation "$WIZSPRINTER_DIR"
 
 # ─────────────────────────────────────────────
-# 6. Doğrulama
+# 9. Doğrulama
 # ─────────────────────────────────────────────
 echo ""
 echo "[setup] Kurulum doğrulanıyor..."

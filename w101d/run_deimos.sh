@@ -30,7 +30,7 @@ fi
 # ─────────────────────────────────────────────
 # Wine içindeki Python'u bul
 # ─────────────────────────────────────────────
-WIN_PYTHON="$WINEPREFIX/drive_c/Python311/python.exe"
+WIN_PYTHON="$WINEPREFIX/drive_c/Python313/python.exe"
 
 if [[ ! -f "$WIN_PYTHON" ]]; then
     echo "[run_deimos] HATA: Wine içinde Python bulunamadı." >&2
