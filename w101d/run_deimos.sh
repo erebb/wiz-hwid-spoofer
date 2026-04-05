@@ -23,19 +23,17 @@ fi
 # ── WizardGraphicalClient.exe'yi bul ─────────
 _find_wiz_exe() {
     local candidates=(
-        # Varsayılan ~/.wine prefix'i
-        "$HOME/.wine/drive_c/ProgramData/KingsIsle Entertainment/Wizard101/Bin/WizardGraphicalClient.exe"
-        "$HOME/.wine/drive_c/Program Files/Wizard101/Bin/WizardGraphicalClient.exe"
-        "$HOME/.wine/drive_c/Program Files (x86)/Wizard101/Bin/WizardGraphicalClient.exe"
-        # Library altındaki olası konumlar
+        "$HOME/Library/Application Support/Wizard101/Bottles/wizard101/drive_c/ProgramData/KingsIsle Entertainment/Wizard101/Bin/WizardGraphicalClient.exe"
+        "$HOME/Library/Application Support/Wizard101/Bottles/wizard101/drive_c/Program Files/Wizard101/Bin/WizardGraphicalClient.exe"
+        "$HOME/Library/Application Support/Wizard101/Bottles/wizard101/drive_c/Program Files (x86)/Wizard101/Bin/WizardGraphicalClient.exe"
         "$HOME/Library/Application Support/Wizard101/drive_c/ProgramData/KingsIsle Entertainment/Wizard101/Bin/WizardGraphicalClient.exe"
         "$HOME/Library/Application Support/Wizard101/drive_c/Program Files/Wizard101/Bin/WizardGraphicalClient.exe"
+        "$HOME/Library/Application Support/Wizard101/drive_c/Program Files (x86)/Wizard101/Bin/WizardGraphicalClient.exe"
     )
     for c in "${candidates[@]}"; do
         [[ -f "$c" ]] && echo "$c" && return
     done
-    # Son çare: HOME altında ara (yavaş olabilir)
-    find "$HOME" -name "WizardGraphicalClient.exe" 2>/dev/null | head -1
+    find "$HOME/Library" -name "WizardGraphicalClient.exe" 2>/dev/null | head -1
 }
 
 WIZ_EXE=$(_find_wiz_exe)
