@@ -13,6 +13,10 @@ CACHE="$HOME/.w101d_cache"
 PYTHON_DIR="$WINEPREFIX/drive_c/Python313"
 WIN_PYTHON="$PYTHON_DIR/python.exe"
 
+# Kısayol: regex'i HİÇBİR ZAMAN source'dan derleme
+# Bu flag her pip çağrısına eklenir
+NO_REGEX_BUILD="--only-binary=regex"
+
 mkdir -p "$CACHE"
 
 # ── Eski kalıntıları temizle ──────────────────
@@ -53,25 +57,24 @@ fi
 echo "[setup] pip kuruluyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" "$CACHE/get-pip.py" --quiet
 
-# ── setuptools + wheel ────────────────────────
-echo "[setup] setuptools + wheel + poetry-core kuruluyor..."
+# ── 1. regex'i binary olarak ÖN-YÜKLE ────────
+# regex cp313-cp313-win_amd64 wheel'ı PyPI'da mevcut.
+# Daha sonraki HER pip adımı $NO_REGEX_BUILD taşıdığından
+# pip bir daha source derlemeye çalışmaz.
+echo "[setup] regex (binary wheel) ön-yükleniyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
-    -m pip install --quiet --only-binary=:all: setuptools wheel
-# poetry.masonry = wizwalker'ın build backend'i; --no-build-isolation ile şart
-WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
-    -m pip install --quiet poetry-core poetry
+    -m pip install --quiet --only-binary=:all: regex
 
-# ── regex: wheel zorunlu, MSVC ile derleme yok ───
-# regex'in cp313-cp313-win_amd64 wheel'ı PyPI'da mevcut.
-# --only-binary=regex: binary yoksa hata ver, source deneme.
-echo "[setup] regex (binary wheel) kuruluyor..."
+# ── 2. setuptools + wheel + poetry ───────────
+echo "[setup] Build araçları kuruluyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
-    -m pip install --quiet --only-binary=regex regex
+    -m pip install --quiet $NO_REGEX_BUILD --prefer-binary \
+        setuptools wheel poetry-core poetry
 
-# ── Deimos bağımlılıkları ─────────────────────
+# ── 3. Deimos bağımlılıkları ─────────────────
 echo "[setup] Deimos bağımlılıkları kuruluyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
-    -m pip install --quiet --prefer-binary \
+    -m pip install --quiet $NO_REGEX_BUILD --prefer-binary \
         "pywin32>=306" \
         "pypresence>=4.3.0" \
         "PySimpleGUI==4.60.5.1" \
@@ -81,7 +84,7 @@ WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
         "pyperclip>=1.9.0" \
         "thefuzz>=0.22.1"
 
-# ── wizwalker + wizsprinter ───────────────────
+# ── 4. wizwalker + wizsprinter ────────────────
 WIZWALKER_DIR="$CACHE/wizwalker"
 WIZSPRINTER_DIR="$CACHE/wizsprinter"
 
@@ -101,11 +104,13 @@ fi
 
 echo "[setup] wizwalker kuruluyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
-    -m pip install --quiet --prefer-binary --no-build-isolation "$WIZWALKER_DIR"
+    -m pip install --quiet $NO_REGEX_BUILD --prefer-binary \
+        --no-build-isolation "$WIZWALKER_DIR"
 
 echo "[setup] wizsprinter kuruluyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
-    -m pip install --quiet --prefer-binary --no-build-isolation "$WIZSPRINTER_DIR"
+    -m pip install --quiet $NO_REGEX_BUILD --prefer-binary \
+        --no-build-isolation "$WIZSPRINTER_DIR"
 
 # ── Doğrulama ─────────────────────────────────
 echo ""
