@@ -94,6 +94,13 @@ if [[ ! -d "$WIZWALKER_DIR" ]]; then
 else
     git -C "$WIZWALKER_DIR" pull --quiet
 fi
+# wizwalker regex<2023 ister ama cp313 wheel'ı yok; 2024+ binary wheel mevcut
+sed -i '' \
+    's|regex = ">=2022.1.18,<2023.0.0"|regex = ">=2024.0.0"|' \
+    "$WIZWALKER_DIR/pyproject.toml" 2>/dev/null || \
+sed -i \
+    's|regex = ">=2022.1.18,<2023.0.0"|regex = ">=2024.0.0"|' \
+    "$WIZWALKER_DIR/pyproject.toml"
 
 echo "[setup] wizsprinter indiriliyor..."
 if [[ ! -d "$WIZSPRINTER_DIR" ]]; then
