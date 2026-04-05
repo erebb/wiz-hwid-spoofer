@@ -132,32 +132,47 @@ if [[ ! -f "$DEIMOS_DIR/Deimos.py" ]]; then
     exit 1
 fi
 
-# ── --deimos-only modu: Wizard101'i başlatma ─
+# ── Wizard101'i başlat (veya zaten çalışıyorsa geç) ─
+_wiz_running() {
+    pgrep -f "WizardGraphicalClient.exe" > /dev/null 2>&1
+}
+
 if [[ "$DEIMOS_ONLY" -eq 0 ]]; then
-    echo "[run] Wizard101 başlatılıyor..."
-    # Oyun kendi dizininden çalışmalı — aksi hâlde ./client.xml vb. bulunamaz
-    WIZ_DIR=$(dirname "$WIZ_EXE")
-    (cd "$WIZ_DIR" && WINEPREFIX="$WINEPREFIX" "$WIZ_WINE" "$WIZ_EXE" -L login.us.wizard101.com 12000) &
-    WIZ_PID=$!
+    if _wiz_running; then
+        echo "[run] Wizard101 zaten çalışıyor."
+    else
+        echo "[run] Wizard101 app üzerinden başlatılıyor..."
+        # 'open -a' → Mac app icon ile aynı şekilde başlatır.
+        # -L flag'i game asset'lerini remote'tan yüklemeye çalışır, başarısız olur.
+        # Normal app launch, patcher/launcher'ı da çalıştırır (assets doğru yüklenir).
+        open -a "Wizard101" 2>/dev/null || true
 
-    echo "[run] Wizard101 yükleniyor, bekleniyor (20 saniye)..."
-    sleep 20
+        echo "[run] Wizard101'in açılması bekleniyor (en fazla 90 saniye)..."
+        for i in $(seq 1 45); do
+            _wiz_running && break
+            sleep 2
+        done
 
-    if ! kill -0 "$WIZ_PID" 2>/dev/null; then
-        echo "[run] HATA: Wizard101 başlamadan kapandı." >&2
-        echo "[run] Eğer DLL hatası aldıysanız, Wizard101'i normal şekilde (Whisky/app üzerinden)" >&2
-        echo "[run] açın ve ardından: bash run_deimos.sh --deimos-only" >&2
-        exit 1
+        if ! _wiz_running; then
+            echo "[run] UYARI: Wizard101 90sn içinde başlamadı." >&2
+            echo "[run] Wizard101'i kendiniz açın, sonra: bash run_deimos.sh --deimos-only" >&2
+            exit 1
+        fi
+        echo "[run] Wizard101 çalışıyor. Login ekranını bekleyin..."
+        sleep 5
     fi
 else
     echo "[run] --deimos-only: Wizard101 başlatılmıyor, sadece Deimos başlatılıyor."
-    if ! pgrep -f "WizardGraphicalClient.exe" > /dev/null 2>&1; then
+    if ! _wiz_running; then
         echo "[run] UYARI: WizardGraphicalClient.exe çalışmıyor görünüyor."
         echo "[run] Wizard101'i önce açın, sonra bu scripti tekrar çalıştırın."
     fi
 fi
 
 # ── Deimos'u aynı prefix'te başlat ──────────
-echo "[run] Deimos başlatılıyor..."
+# Wizard101.app'in wine32on64'ü propsys.dll.VariantToString'i desteklemiyor.
+# Deimos/Python için Homebrew wine (tam implementasyon) kullanıyoruz.
+# WINEPREFIX aynı → aynı wineserver → WizWalker OpenProcess çalışır.
+echo "[run] Deimos başlatılıyor (Homebrew wine: $WINE_BIN)..."
 cd "$DEIMOS_DIR"
-WINEPREFIX="$WINEPREFIX" "$WIZ_WINE" "$WIN_PYTHON" Deimos.py
+WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" Deimos.py
