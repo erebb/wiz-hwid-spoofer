@@ -21,24 +21,21 @@ fi
 
 # ── WizardGraphicalClient.exe'yi bul ─────────
 _find_wiz_exe() {
-    # 1. Bilinen sabit yollar
+    # Library/Wine klasörlerini önce ara (asıl kurulum yeri)
     local candidates=(
-        "/Applications/Wizard101.app/Contents/Resources/Wizard101/Bin/WizardGraphicalClient.exe"
-        "/Applications/Wizard101.app/Contents/Resources/drive_c/Program Files/Wizard101/Bin/WizardGraphicalClient.exe"
-        "/Applications/Wizard101.app/Contents/Resources/drive_c/Program Files (x86)/Wizard101/Bin/WizardGraphicalClient.exe"
         "$HOME/Library/Application Support/Wizard101/drive_c/Program Files/Wizard101/Bin/WizardGraphicalClient.exe"
         "$HOME/Library/Application Support/Wizard101/drive_c/Program Files (x86)/Wizard101/Bin/WizardGraphicalClient.exe"
+        "$HOME/Library/Application Support/com.kingsisle.wizard101/drive_c/Program Files/Wizard101/Bin/WizardGraphicalClient.exe"
         "$HOME/Library/Containers/com.kingsisle.wizard101/Data/Library/Application Support/Wizard101/drive_c/Program Files/Wizard101/Bin/WizardGraphicalClient.exe"
+        "$HOME/Library/Application Support/Wizard101/drive_c/Wizard101/Bin/WizardGraphicalClient.exe"
+        "/Applications/Wizard101.app/Contents/Resources/Wizard101/Bin/WizardGraphicalClient.exe"
+        "/Applications/Wizard101.app/Contents/Resources/drive_c/Program Files/Wizard101/Bin/WizardGraphicalClient.exe"
     )
     for c in "${candidates[@]}"; do
         [[ -f "$c" ]] && echo "$c" && return
     done
-    # 2. find ile geniş arama — tüm olası yerler
-    find \
-        /Applications/Wizard101.app \
-        "$HOME/Library/Application Support" \
-        "$HOME/Library/Containers" \
-        -name "WizardGraphicalClient.exe" 2>/dev/null | head -1
+    # find ile ~/Library altında ara
+    find "$HOME/Library" -name "WizardGraphicalClient.exe" 2>/dev/null | head -1
 }
 
 WIZ_EXE=$(_find_wiz_exe)
