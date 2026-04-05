@@ -83,21 +83,24 @@ WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" "$DOWNLOAD_DIR/get-pip.py" --
 #    Embeddable zip bunları içermez, ayrıca kurulmalı.
 # ─────────────────────────────────────────────
 echo "[setup] setuptools + wheel kuruluyor..."
-WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet \
+WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet --prefer-binary \
     setuptools wheel
 
 # ─────────────────────────────────────────────
 # 8. Build backend'ler
 # ─────────────────────────────────────────────
 echo "[setup] Build backend'ler kuruluyor..."
-WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet \
+WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet --prefer-binary \
     poetry-core poetry hatchling
 
 # ─────────────────────────────────────────────
 # 9. Deimos bağımlılıkları
+#    --prefer-binary: C extension paketleri (regex, cffi vb.) için
+#    hazır wheel kullan, Wine içinde MSVC derleyici olmadığından
+#    kaynak koddan derleme başarısız olur.
 # ─────────────────────────────────────────────
 echo "[setup] Deimos bağımlılıkları kuruluyor..."
-WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet \
+WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet --prefer-binary \
     "pywin32>=306" \
     "pypresence>=4.3.0" \
     "PySimpleGUI==4.60.5.1" \
@@ -135,11 +138,11 @@ fi
 
 echo "[setup] wizwalker kuruluyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
-    -m pip install --quiet --no-build-isolation "$WIZWALKER_DIR"
+    -m pip install --quiet --prefer-binary --no-build-isolation "$WIZWALKER_DIR"
 
 echo "[setup] wizsprinter kuruluyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
-    -m pip install --quiet --no-build-isolation "$WIZSPRINTER_DIR"
+    -m pip install --quiet --prefer-binary --no-build-isolation "$WIZSPRINTER_DIR"
 
 # ─────────────────────────────────────────────
 # 11. Doğrulama
