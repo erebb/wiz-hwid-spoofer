@@ -54,9 +54,12 @@ echo "[setup] pip kuruluyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" "$CACHE/get-pip.py" --quiet
 
 # ── setuptools + wheel ────────────────────────
-echo "[setup] setuptools + wheel kuruluyor..."
+echo "[setup] setuptools + wheel + poetry-core kuruluyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
     -m pip install --quiet --only-binary=:all: setuptools wheel
+# poetry.masonry = wizwalker'ın build backend'i; --no-build-isolation ile şart
+WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
+    -m pip install --quiet poetry-core poetry
 
 # ── regex: wheel zorunlu, MSVC ile derleme yok ───
 # regex'in cp313-cp313-win_amd64 wheel'ı PyPI'da mevcut.
