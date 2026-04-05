@@ -42,5 +42,5 @@ echo "[run_deimos] Klasör : $DEIMOS_DIR"
 echo ""
 
 cd "$DEIMOS_DIR"
-exec WINEPREFIX="$WINEPREFIX" WINEARCH="$WINEARCH" \
-    "$WINE_BIN" "$WIN_PYTHON" Deimos.py
+# detect_wine.sh zaten WINEPREFIX/WINEARCH export etti
+"$WINE_BIN" "$WIN_PYTHON" Deimos.py
