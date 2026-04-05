@@ -122,46 +122,45 @@ _build_propsys_stub() {
     tmp=$(mktemp -d)
     trap "rm -rf '$tmp'" RETURN
 
-    # Minimal stub — windows.h YOK, CRT YOK, sıfır dış bağımlılık.
-    # windows.h propsys'ten ek import'lar ekler → Wine unimplemented stub'ları tetikler.
+    # propsys_stub.c — NO headers (propvarutil.h'ı dahil etmemek için)
+    # Aksi hâlde propvarutil.h inline çağrıları import tablosuna girer.
     cat > "$tmp/propsys_stub.c" << 'CEOF'
-/* propsys minimal stub — NO headers, NO CRT */
+/* propsys minimal stub — NO standard headers */
 typedef unsigned short  wchar_t;
 typedef long            HRESULT;
 typedef unsigned int    UINT;
 typedef int             BOOL;
-typedef void*           HINSTANCE;
+typedef void*           HMODULE;
 typedef unsigned long   DWORD;
 typedef void*           LPVOID;
 
-/* VariantToString: propvariant → string.
-   Wine 6.x bu fonksiyonu implemente etmemiş.
-   Stub: boş string döner, S_OK (0) çıkışıyla devam et. */
-__declspec(dllexport)
 HRESULT VariantToString(const void* propvar, wchar_t* psz, UINT cch)
 {
     if (psz && cch > 0) *psz = (wchar_t)0;
     return 0; /* S_OK */
 }
 
-__declspec(dllexport)
-BOOL __stdcall DllMain(HINSTANCE h, DWORD r, LPVOID p)
-{
-    return 1; /* TRUE */
-}
+BOOL __stdcall DllMain(HMODULE h, DWORD r, LPVOID p) { return 1; }
 CEOF
 
+    # .def dosyası — export tablosunu doğrudan tanımlar, -nostdlib gerekmez
+    # -nostdlib/-nostartfiles PE header'ı bozuyordu (VariantToString yanlış offset'e işaret ediyordu)
+    cat > "$tmp/propsys.def" << 'DEOF'
+LIBRARY "propsys"
+EXPORTS
+    VariantToString
+DEOF
+
+    local build_log="$tmp/build.log"
     if x86_64-w64-mingw32-gcc -shared -o "$tmp/propsys.dll" \
-            "$tmp/propsys_stub.c" \
-            -nostdlib -nostartfiles \
-            -Wl,-e,DllMain \
-            -lkernel32 \
-            2>/dev/null; then
-        cp "$tmp/propsys.dll" "$out/propsys.dll"
+            "$tmp/propsys_stub.c" "$tmp/propsys.def" \
+            2>"$build_log"; then
+        cp "$tmp/propsys.dll" "$out/propsys_stub.dll"
         echo "[run] propsys.dll stub derlendi ve kopyalandı."
         return 0
     else
-        echo "[run] HATA: propsys.dll stub derlenemedi." >&2
+        echo "[run] HATA: propsys.dll stub derlenemedi:" >&2
+        cat "$build_log" >&2
         return 1
     fi
 }
