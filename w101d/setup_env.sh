@@ -89,11 +89,8 @@ WIZWALKER_DIR="$CACHE/wizwalker"
 WIZSPRINTER_DIR="$CACHE/wizsprinter"
 
 echo "[setup] wizwalker indiriliyor..."
-if [[ ! -d "$WIZWALKER_DIR" ]]; then
-    git clone --quiet https://github.com/StarrFox/wizwalker.git "$WIZWALKER_DIR"
-else
-    git -C "$WIZWALKER_DIR" pull --quiet
-fi
+rm -rf "$WIZWALKER_DIR"
+git clone --quiet https://github.com/StarrFox/wizwalker.git "$WIZWALKER_DIR"
 # wizwalker regex<2023 ister ama cp313 wheel'ı yok; 2024+ binary wheel mevcut
 sed -i '' \
     's|regex = ">=2022.1.18,<2023.0.0"|regex = ">=2024.0.0"|' \
@@ -103,11 +100,8 @@ sed -i \
     "$WIZWALKER_DIR/pyproject.toml"
 
 echo "[setup] wizsprinter indiriliyor..."
-if [[ ! -d "$WIZSPRINTER_DIR" ]]; then
-    git clone --quiet https://github.com/Deimos-Wizard101/WizSprinter.git "$WIZSPRINTER_DIR"
-else
-    git -C "$WIZSPRINTER_DIR" pull --quiet
-fi
+rm -rf "$WIZSPRINTER_DIR"
+git clone --quiet https://github.com/Deimos-Wizard101/WizSprinter.git "$WIZSPRINTER_DIR"
 
 echo "[setup] wizwalker kuruluyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
