@@ -104,8 +104,11 @@ rm -rf "$WIZSPRINTER_DIR"
 git clone --quiet https://github.com/Deimos-Wizard101/WizSprinter.git "$WIZSPRINTER_DIR"
 
 echo "[setup] wizsprinter site-packages'a kopyalanıyor..."
-rm -rf "$SITE_PKG/wizsprinter"
-cp -r "$WIZSPRINTER_DIR/wizsprinter" "$SITE_PKG/wizsprinter"
+# WizSprinter wizwalker'ın extension'ı: wizwalker/extensions/wizsprinter/ altında
+mkdir -p "$SITE_PKG/wizwalker/extensions"
+rm -rf "$SITE_PKG/wizwalker/extensions/wizsprinter"
+cp -r "$WIZSPRINTER_DIR/wizwalker/extensions/wizsprinter" \
+      "$SITE_PKG/wizwalker/extensions/wizsprinter"
 
 # ── Doğrulama ─────────────────────────────────
 echo ""
@@ -114,7 +117,7 @@ WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -c "
 import sys; print(f'  Python     : {sys.version.split()[0]}')
 import tkinter;     print('  tkinter    : OK')
 import wizwalker;   print('  wizwalker  : OK')
-import wizsprinter; print('  wizsprinter: OK')
+import wizwalker.extensions.wizsprinter; print('  wizsprinter: OK')
 import win32api;    print('  pywin32    : OK')
 import PySimpleGUI; print('  PySimpleGUI: OK')
 import lark;        print('  lark       : OK')
