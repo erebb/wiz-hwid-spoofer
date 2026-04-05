@@ -50,6 +50,11 @@ if [[ ! -f "$WIN_PYTHON" ]]; then
     echo "[setup] Python kurulumu tamamlandı."
 fi
 
+# ── pip upgrade ───────────────────────────────
+echo "[setup] pip güncelleniyor..."
+WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
+    -m pip install --quiet --upgrade pip
+
 # ── pip bağımlılıkları ────────────────────────
 echo "[setup] Paketler kuruluyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
@@ -76,9 +81,12 @@ WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
 # ── wizwalker: source'u direkt kopyala ────────
 # Build sistemi yok → poetry/regex constraint sorunu yok
 WIZWALKER_DIR="$CACHE/wizwalker"
-echo "[setup] wizwalker indiriliyor..."
+echo "[setup] wizwalker indiriliyor (Deimos fork)..."
 rm -rf "$WIZWALKER_DIR"
-git clone --quiet https://github.com/StarrFox/wizwalker.git "$WIZWALKER_DIR"
+# Deimos-Wizard101/wizwalker kullanılmalı — Primitive sınıfı burada var
+# StarrFox/wizwalker'da Primitive yok, wizsprinter import hatası verir
+git clone --quiet --branch development \
+    https://github.com/Deimos-Wizard101/wizwalker.git "$WIZWALKER_DIR"
 
 # cli modülünü kaldır: aiomonitor → telnetlib (Python 3.13'te yok)
 python3 -c "
