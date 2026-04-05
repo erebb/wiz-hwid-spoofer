@@ -95,16 +95,31 @@ git clone --quiet https://github.com/StarrFox/wizwalker.git "$WIZWALKER_DIR"
 # 1) regex "^2022.1.18" → ">=2024.0.0"  (cp313 binary wheel mevcut)
 # 2) poetry>=0.12 → poetry-core          (modern build backend)
 # 3) poetry.masonry.api → poetry.core.masonry.api
-echo "[setup] wizwalker pyproject.toml patch ediliyor..."
+echo "[setup] wizwalker patch ediliyor..."
 python3 -c "
 import pathlib
+
+# 1) pyproject.toml: regex constraint + build backend
 p = pathlib.Path('$WIZWALKER_DIR/pyproject.toml')
 t = p.read_text()
 t = t.replace('regex = \"^2022.1.18\"',        'regex = \">=2024.0.0\"')
 t = t.replace('requires = [\"poetry>=0.12\"]', 'requires = [\"poetry-core\"]')
 t = t.replace('poetry.masonry.api',            'poetry.core.masonry.api')
 p.write_text(t)
-print('[setup] wizwalker pyproject.toml patch OK')
+print('[setup] pyproject.toml patch OK')
+
+# 2) wizwalker/__init__.py: cli import'unu kaldır
+# telnetlib Python 3.13'te silindi; aiomonitor 0.4.x bunu kullanıyor.
+# wizwalker/cli/console.py -> aiomonitor -> telnetlib -> ModuleNotFoundError
+# Deimos cli modülünü kullanmıyor, import'u kaldırmak güvenli.
+init = pathlib.Path('$WIZWALKER_DIR/wizwalker/__init__.py')
+t2 = init.read_text()
+t2 = t2.replace('from . import cli, combat, memory, utils',
+                'from . import combat, memory, utils')
+t2 = t2.replace('from . import cli, memory, utils',
+                'from . import memory, utils')
+init.write_text(t2)
+print('[setup] __init__.py cli patch OK')
 "
 
 # wizwalker'ı kur (poetry-core + regex>=2024 binary hazır)
