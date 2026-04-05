@@ -130,7 +130,9 @@ done
 
 if [[ "$DEIMOS_ONLY" -eq 0 ]]; then
     echo "[run] Wizard101 başlatılıyor..."
-    WINEPREFIX="$WINEPREFIX" "$WIZ_WINE" "$WIZ_EXE" -L login.us.wizard101.com 12000 &
+    # Oyun kendi dizininden çalışmalı — aksi hâlde ./client.xml vb. bulunamaz
+    WIZ_DIR=$(dirname "$WIZ_EXE")
+    (cd "$WIZ_DIR" && WINEPREFIX="$WINEPREFIX" "$WIZ_WINE" "$WIZ_EXE" -L login.us.wizard101.com 12000) &
     WIZ_PID=$!
 
     echo "[run] Wizard101 yükleniyor, bekleniyor (20 saniye)..."
