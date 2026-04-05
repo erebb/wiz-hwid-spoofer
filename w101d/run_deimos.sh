@@ -11,7 +11,7 @@ DEIMOS_DIR="${1:-${DEIMOS_DIR:-$HOME/.w101d_cache/Deimos}}"
 # ── WizardGraphicalClient.exe'yi bul ─────────
 _find_wiz_exe() {
     local candidates=(
-        # Whisky (Mac Wine manager) — Bottles yapısı
+        # Resmi Mac Wizard101 uygulaması (kendi Wine'ı + prefix'i var)
         "$HOME/Library/Application Support/Wizard101/Bottles/wizard101/drive_c/ProgramData/KingsIsle Entertainment/Wizard101/Bin/WizardGraphicalClient.exe"
         "$HOME/Library/Application Support/Wizard101/Bottles/wizard101/drive_c/Program Files/Wizard101/Bin/WizardGraphicalClient.exe"
         "$HOME/Library/Application Support/Wizard101/Bottles/wizard101/drive_c/Program Files (x86)/Wizard101/Bin/WizardGraphicalClient.exe"
@@ -43,51 +43,67 @@ echo "[run] Wizard101 bulundu: $WIZ_EXE"
 WIZ_PREFIX=$(echo "$WIZ_EXE" | sed 's|/drive_c/.*||')
 echo "[run] Wizard101 Wine prefix: $WIZ_PREFIX"
 
-# ── Prefix mimarisini tespit et ──────────────
-_prefix_arch() {
-    local reg="$1/system.reg"
-    if [[ -f "$reg" ]] && grep -q '#arch=win32' "$reg" 2>/dev/null; then
-        echo "win32"
-    else
-        echo "win64"
-    fi
-}
+# ── Wizard101 uygulamasının kendi Wine binary'sini bul ────────────────────────
+# Mac Wizard101 uygulaması kendi Wine'ını içinde barındırır.
+# SADECE bu Wine o prefix ile uyumludur — Homebrew wine kullanmak DLL hatası verir.
+#
+# Prefix yolu örn: ~/Library/Application Support/Wizard101/Bottles/wizard101
+# Uygulama yolu  : /Applications/Wizard101.app  (veya özel ad)
+_find_wiz_app_wine() {
+    # Prefix path'inden uygulama adını çıkarmaya çalış
+    # ~/Library/Application Support/Wizard101/Bottles/... → Wizard101
+    local app_name
+    app_name=$(echo "$WIZ_PREFIX" | grep -oE 'Application Support/[^/]+' | cut -d/ -f2 || true)
 
-WIZ_ARCH=$(_prefix_arch "$WIZ_PREFIX")
-echo "[run] Wizard101 prefix mimarisi: $WIZ_ARCH"
+    local search_dirs=()
+    [[ -n "$app_name" ]] && search_dirs+=("/Applications/${app_name}.app")
+    search_dirs+=(
+        "/Applications/Wizard101.app"
+        "/Applications/KingsIsle Wizard101.app"
+    )
 
-# ── Wizard101 için Wine binary'sini seç ──────
-# Önce Whisky'nin kendi Wine'ını ara — tam WOW64 desteği var
-_find_whisky_wine() {
-    local bundle="/Applications/Whisky.app/Contents/Resources/Wine.bundle/Contents/Resources/wine/bin"
-    for bin in "$bundle/wine64" "$bundle/wine"; do
-        [[ -x "$bin" ]] && echo "$bin" && return
+    for app in "${search_dirs[@]}"; do
+        [[ -d "$app" ]] || continue
+        # wine64 önce dene (64-bit), yoksa wine (32-bit)
+        local found
+        found=$(find "$app/Contents" \( -name "wine64" -o -name "wine" \) -type f 2>/dev/null | head -1)
+        if [[ -n "$found" && -x "$found" ]]; then
+            echo "$found"
+            return
+        fi
     done
-    # Whisky farklı path'te olabilir
-    find /Applications/Whisky.app -name "wine64" 2>/dev/null | head -1
-    find /Applications/Whisky.app -name "wine"   2>/dev/null | head -1
+
+    # Whisky de dene (kullanıcı Whisky üzerinden kurmuş olabilir)
+    local whisky_bin="/Applications/Whisky.app/Contents/Resources/Wine.bundle/Contents/Resources/wine/bin"
+    for b in "$whisky_bin/wine64" "$whisky_bin/wine"; do
+        [[ -x "$b" ]] && echo "$b" && return
+    done
+
+    echo ""
 }
 
-WIZ_WINE="$WINE_BIN"
-if [[ -d "/Applications/Whisky.app" ]]; then
-    _whisky_wine=$(_find_whisky_wine 2>/dev/null || true)
-    if [[ -n "$_whisky_wine" && -x "$_whisky_wine" ]]; then
-        WIZ_WINE="$_whisky_wine"
-        echo "[run] Whisky Wine kullanılıyor: $WIZ_WINE"
-    fi
+WIZ_WINE=$(_find_wiz_app_wine)
+
+if [[ -z "$WIZ_WINE" ]]; then
+    echo "[run] UYARI: Wizard101.app içinde Wine binary bulunamadı."
+    echo "[run] Homebrew Wine deneniyor: $WINE_BIN"
+    echo "[run] DLL hataları alırsanız Wizard101'i Whisky üzerinden başlatın,"
+    echo "[run]   sonra bu scripti aşağıdaki flag ile tekrar çalıştırın:"
+    echo "[run]   bash run_deimos.sh --deimos-only"
+    WIZ_WINE="$WINE_BIN"
+else
+    echo "[run] Wizard101 Wine binary: $WIZ_WINE"
 fi
 
-# ── WINEPREFIX'i Wizard101'inkine geçir ──────
-# WINEARCH'ı kaldır — prefix'teki system.reg'den otomatik algılanır.
-# detect_wine.sh'in win64 değeri burada çakışma yaratırdı.
+# ── WINEPREFIX ve WINEARCH'ı ayarla ──────────
+# detect_wine.sh WINEARCH=win64 set etti — bunu kaldır.
+# Wine binary'si prefix'teki system.reg'den mimariyi otomatik algılar.
 export WINEPREFIX="$WIZ_PREFIX"
-unset  WINEARCH
+unset WINEARCH
 
-echo "[run] Wine binary  : $WIZ_WINE"
-echo "[run] WINEPREFIX   : $WINEPREFIX"
+echo "[run] WINEPREFIX: $WINEPREFIX"
 
 # ── Python313'ü Wizard101 prefix'ine kopyala ─
-# setup_env.sh bunu ~/.w101d_wine'a kurdu, şimdi Wizard101'in prefix'ine de lazım.
 OUR_PYTHON="$HOME/.w101d_wine/drive_c/Python313"
 WIN_PYTHON="$WINEPREFIX/drive_c/Python313/python.exe"
 
@@ -106,31 +122,35 @@ if [[ ! -f "$DEIMOS_DIR/Deimos.py" ]]; then
     exit 1
 fi
 
-# ── vcrun2019 — Wizard101 prefix'inde kontrol et ──
-if command -v winetricks &>/dev/null; then
-    if ! WINEPREFIX="$WINEPREFIX" winetricks --list-installed 2>/dev/null | grep -q vcrun2019; then
-        echo "[run] vcrun2019 Wizard101 prefix'ine kuruluyor..."
-        WINEPREFIX="$WINEPREFIX" winetricks --unattended vcrun2019 2>/dev/null || true
+# ── --deimos-only modu: Wizard101'i başlatma ─
+DEIMOS_ONLY=0
+for arg in "$@"; do
+    [[ "$arg" == "--deimos-only" ]] && DEIMOS_ONLY=1
+done
+
+if [[ "$DEIMOS_ONLY" -eq 0 ]]; then
+    echo "[run] Wizard101 başlatılıyor..."
+    WINEPREFIX="$WINEPREFIX" "$WIZ_WINE" "$WIZ_EXE" -L login.us.wizard101.com 12000 &
+    WIZ_PID=$!
+
+    echo "[run] Wizard101 yükleniyor, bekleniyor (20 saniye)..."
+    sleep 20
+
+    if ! kill -0 "$WIZ_PID" 2>/dev/null; then
+        echo "[run] HATA: Wizard101 başlamadan kapandı." >&2
+        echo "[run] Eğer DLL hatası aldıysanız, Wizard101'i normal şekilde (Whisky/app üzerinden)" >&2
+        echo "[run] açın ve ardından: bash run_deimos.sh --deimos-only" >&2
+        exit 1
     fi
-fi
-
-# ── Wizard101'i başlat ───────────────────────
-echo "[run] Wizard101 başlatılıyor..."
-"$WIZ_WINE" "$WIZ_EXE" -L login.us.wizard101.com 12000 &
-WIZ_PID=$!
-
-# ── Wizard101'in açılmasını bekle ────────────
-echo "[run] Wizard101 yükleniyor, bekleniyor (20 saniye)..."
-sleep 20
-
-# Wizard101 hâlâ çalışıyor mu?
-if ! kill -0 "$WIZ_PID" 2>/dev/null; then
-    echo "[run] HATA: Wizard101 başlamadan kapandı." >&2
-    echo "[run] Wine çıktısını yukarıda kontrol edin." >&2
-    exit 1
+else
+    echo "[run] --deimos-only: Wizard101 başlatılmıyor, sadece Deimos başlatılıyor."
+    if ! pgrep -f "WizardGraphicalClient.exe" > /dev/null 2>&1; then
+        echo "[run] UYARI: WizardGraphicalClient.exe çalışmıyor görünüyor."
+        echo "[run] Wizard101'i önce açın, sonra bu scripti tekrar çalıştırın."
+    fi
 fi
 
 # ── Deimos'u aynı prefix'te başlat ──────────
 echo "[run] Deimos başlatılıyor..."
 cd "$DEIMOS_DIR"
-"$WIZ_WINE" "$WIN_PYTHON" Deimos.py
+WINEPREFIX="$WINEPREFIX" "$WIZ_WINE" "$WIN_PYTHON" Deimos.py
