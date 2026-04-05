@@ -9,13 +9,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/detect_wine.sh"
 
-PYTHON_VERSION="3.13.3"
+PYTHON_VERSION="3.11.9"
 EMBED_ZIP="python-${PYTHON_VERSION}-embed-amd64.zip"
 EMBED_URL="https://www.python.org/ftp/python/${PYTHON_VERSION}/${EMBED_ZIP}"
 GET_PIP_URL="https://bootstrap.pypa.io/get-pip.py"
 DOWNLOAD_DIR="$HOME/.w101d_cache"
 
-PYTHON_DIR="$WINEPREFIX/drive_c/Python313"
+PYTHON_DIR="$WINEPREFIX/drive_c/Python311"
 WIN_PYTHON="$PYTHON_DIR/python.exe"
 
 mkdir -p "$DOWNLOAD_DIR"
@@ -38,7 +38,16 @@ WINEPREFIX="$WINEPREFIX" winetricks --unattended vcrun2019 2>/dev/null || \
     echo "[setup] vcrun2019 kurulumu atlandı (zaten kurulu olabilir)."
 
 # ─────────────────────────────────────────────
-# 3. Embeddable Python zip'i indir
+# 3. Eski Python 3.13 kalıntısını temizle (varsa)
+# ─────────────────────────────────────────────
+OLD_PYTHON_DIR="$WINEPREFIX/drive_c/Python313"
+if [[ -d "$OLD_PYTHON_DIR" ]]; then
+    echo "[setup] Eski Python 3.13 temizleniyor..."
+    rm -rf "$OLD_PYTHON_DIR"
+fi
+
+# ─────────────────────────────────────────────
+# 4. Embeddable Python zip'i indir
 # ─────────────────────────────────────────────
 if [[ ! -f "$DOWNLOAD_DIR/$EMBED_ZIP" ]]; then
     echo "[setup] Python $PYTHON_VERSION indiriliyor..."
@@ -48,7 +57,7 @@ else
 fi
 
 # ─────────────────────────────────────────────
-# 4. Wine prefix içine extract et
+# 5. Wine prefix içine extract et
 # ─────────────────────────────────────────────
 if [[ ! -f "$WIN_PYTHON" ]]; then
     echo "[setup] Python extract ediliyor: $PYTHON_DIR"
@@ -59,16 +68,16 @@ else
 fi
 
 # ─────────────────────────────────────────────
-# 5. site-packages etkinleştir (python313._pth)
+# 6. site-packages etkinleştir (python311._pth)
 # ─────────────────────────────────────────────
-PTH_FILE="$PYTHON_DIR/python313._pth"
+PTH_FILE="$PYTHON_DIR/python311._pth"
 if [[ -f "$PTH_FILE" ]] && grep -q "^#import site" "$PTH_FILE"; then
     echo "[setup] site-packages etkinleştiriliyor..."
     sed -i '' 's/^#import site/import site/' "$PTH_FILE"
 fi
 
 # ─────────────────────────────────────────────
-# 6. pip kur
+# 7. pip kur
 # ─────────────────────────────────────────────
 if [[ ! -f "$DOWNLOAD_DIR/get-pip.py" ]]; then
     echo "[setup] get-pip.py indiriliyor..."
@@ -79,7 +88,7 @@ echo "[setup] pip kuruluyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" "$DOWNLOAD_DIR/get-pip.py" --quiet
 
 # ─────────────────────────────────────────────
-# 7. setuptools + wheel (build backend için şart)
+# 8. setuptools + wheel (build backend için şart)
 #    Embeddable zip bunları içermez, ayrıca kurulmalı.
 # ─────────────────────────────────────────────
 echo "[setup] setuptools + wheel kuruluyor..."
@@ -87,14 +96,14 @@ WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet --pref
     setuptools wheel
 
 # ─────────────────────────────────────────────
-# 8. Build backend'ler
+# 9. Build backend'ler
 # ─────────────────────────────────────────────
 echo "[setup] Build backend'ler kuruluyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet --prefer-binary \
     poetry-core poetry hatchling
 
 # ─────────────────────────────────────────────
-# 9. Deimos bağımlılıkları
+# 10. Deimos bağımlılıkları
 #    --prefer-binary: C extension paketleri (regex, cffi vb.) için
 #    hazır wheel kullan, Wine içinde MSVC derleyici olmadığından
 #    kaynak koddan derleme başarısız olur.
@@ -117,7 +126,7 @@ WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
     --register 2>/dev/null || true
 
 # ─────────────────────────────────────────────
-# 10. wizwalker + wizsprinter
+# 11. wizwalker + wizsprinter
 # ─────────────────────────────────────────────
 WIZWALKER_DIR="$DOWNLOAD_DIR/wizwalker"
 WIZSPRINTER_DIR="$DOWNLOAD_DIR/wizsprinter"
@@ -145,7 +154,7 @@ WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
     -m pip install --quiet --prefer-binary --no-build-isolation "$WIZSPRINTER_DIR"
 
 # ─────────────────────────────────────────────
-# 11. Doğrulama
+# 12. Doğrulama
 # ─────────────────────────────────────────────
 echo ""
 echo "[setup] Kurulum doğrulanıyor..."
