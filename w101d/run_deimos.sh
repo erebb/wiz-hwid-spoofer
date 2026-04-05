@@ -30,10 +30,20 @@ fi
 
 # ── WizardGraphicalClient.exe'yi bul ─────────
 _find_wiz_exe() {
-    # Wizard101 Mac uygulaması oyunu ~/Library altındaki Wine prefix'ine kurar.
-    # Homebrew Wine'ı kullanacağız ama oyunun kendi prefix'indeki exe'yi çalıştıracağız.
-    find "$HOME/Library" /Applications/Wizard101.app \
-        -name "WizardGraphicalClient.exe" 2>/dev/null | head -1
+    local candidates=(
+        # Whisky (Mac Wine manager) — Bottles yapısı
+        "$HOME/Library/Application Support/Wizard101/Bottles/wizard101/drive_c/ProgramData/KingsIsle Entertainment/Wizard101/Bin/WizardGraphicalClient.exe"
+        # Program Files alternatifleri
+        "$HOME/Library/Application Support/Wizard101/Bottles/wizard101/drive_c/Program Files/Wizard101/Bin/WizardGraphicalClient.exe"
+        "$HOME/Library/Application Support/Wizard101/Bottles/wizard101/drive_c/Program Files (x86)/Wizard101/Bin/WizardGraphicalClient.exe"
+        # Bottles olmadan
+        "$HOME/Library/Application Support/Wizard101/drive_c/ProgramData/KingsIsle Entertainment/Wizard101/Bin/WizardGraphicalClient.exe"
+        "$HOME/Library/Application Support/Wizard101/drive_c/Program Files/Wizard101/Bin/WizardGraphicalClient.exe"
+    )
+    for c in "${candidates[@]}"; do
+        [[ -f "$c" ]] && echo "$c" && return
+    done
+    find "$HOME/Library" -name "WizardGraphicalClient.exe" 2>/dev/null | head -1
 }
 
 WIZ_EXE=$(_find_wiz_exe)
