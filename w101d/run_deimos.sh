@@ -7,7 +7,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/detect_wine.sh"
 
 DEIMOS_DIR="${1:-${DEIMOS_DIR:-$HOME/.w101d_cache/Deimos}}"
+# Python: setup_env.sh ~/.w101d_wine'a kurdu — onu Wizard101'in prefix'ine kopyala
+OUR_PYTHON="$HOME/.w101d_wine/drive_c/Python313"
 WIN_PYTHON="$WINEPREFIX/drive_c/Python313/python.exe"
+
+if [[ ! -f "$WIN_PYTHON" && -d "$OUR_PYTHON" ]]; then
+    echo "[run] Python, Wizard101 prefix'ine kopyalanıyor..."
+    cp -r "$OUR_PYTHON" "$WINEPREFIX/drive_c/Python313"
+    # site-packages de kopyala
+    cp -r "$HOME/.w101d_wine/drive_c/Python313" "$WINEPREFIX/drive_c/" 2>/dev/null || true
+fi
 
 if [[ ! -f "$WIN_PYTHON" ]]; then
     echo "[run] HATA: Wine içinde Python bulunamadı. Önce setup_env.sh çalıştırın." >&2
@@ -21,21 +30,10 @@ fi
 
 # ── WizardGraphicalClient.exe'yi bul ─────────
 _find_wiz_exe() {
-    # Library/Wine klasörlerini önce ara (asıl kurulum yeri)
-    local candidates=(
-        "$HOME/Library/Application Support/Wizard101/drive_c/Program Files/Wizard101/Bin/WizardGraphicalClient.exe"
-        "$HOME/Library/Application Support/Wizard101/drive_c/Program Files (x86)/Wizard101/Bin/WizardGraphicalClient.exe"
-        "$HOME/Library/Application Support/com.kingsisle.wizard101/drive_c/Program Files/Wizard101/Bin/WizardGraphicalClient.exe"
-        "$HOME/Library/Containers/com.kingsisle.wizard101/Data/Library/Application Support/Wizard101/drive_c/Program Files/Wizard101/Bin/WizardGraphicalClient.exe"
-        "$HOME/Library/Application Support/Wizard101/drive_c/Wizard101/Bin/WizardGraphicalClient.exe"
-        "/Applications/Wizard101.app/Contents/Resources/Wizard101/Bin/WizardGraphicalClient.exe"
-        "/Applications/Wizard101.app/Contents/Resources/drive_c/Program Files/Wizard101/Bin/WizardGraphicalClient.exe"
-    )
-    for c in "${candidates[@]}"; do
-        [[ -f "$c" ]] && echo "$c" && return
-    done
-    # find ile ~/Library altında ara
-    find "$HOME/Library" -name "WizardGraphicalClient.exe" 2>/dev/null | head -1
+    # Wizard101 Mac uygulaması oyunu ~/Library altındaki Wine prefix'ine kurar.
+    # Homebrew Wine'ı kullanacağız ama oyunun kendi prefix'indeki exe'yi çalıştıracağız.
+    find "$HOME/Library" /Applications/Wizard101.app \
+        -name "WizardGraphicalClient.exe" 2>/dev/null | head -1
 }
 
 WIZ_EXE=$(_find_wiz_exe)
@@ -55,12 +53,19 @@ if [[ -z "$WIZ_EXE" ]]; then
 fi
 
 echo "[run] Wizard101 bulundu: $WIZ_EXE"
-echo "[run] Wine prefix    : $WINEPREFIX"
 
-# ── Wizard101'i bizim Wine prefix'imizle başlat ─
-# -L login.us.wizard101.com 12000 → launcher'ı bypass eder, direkt login
-# & → arka planda çalıştır, Deimos başlatmaya devam et
-echo "[run] Wizard101 başlatılıyor (bizim Wine prefix'imizde)..."
+# Exe'nin bulunduğu Wine prefix'ini tespit et
+# Yol: .../drive_c/... → prefix = drive_c'nin üstü
+WIZ_PREFIX=$(echo "$WIZ_EXE" | sed 's|/drive_c/.*||')
+echo "[run] Wizard101 Wine prefix: $WIZ_PREFIX"
+echo "[run] Bizim Homebrew Wine  : $WINE_BIN"
+
+# Her iki uygulama AYNI WINEPREFIX'te çalışmalı → aynı wineserver → memory erişimi OK
+export WINEPREFIX="$WIZ_PREFIX"
+
+# ── Wizard101'i başlat ───────────────────────
+# -L login.us.wizard101.com 12000 → launcher bypass, direkt login
+echo "[run] Wizard101 başlatılıyor..."
 "$WINE_BIN" "$WIZ_EXE" -L login.us.wizard101.com 12000 &
 
 # ── Wizard101'in açılmasını bekle ────────────
