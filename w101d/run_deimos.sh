@@ -6,7 +6,17 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/detect_wine.sh"
 
-DEIMOS_DIR="${1:-${DEIMOS_DIR:-$HOME/.w101d_cache/Deimos}}"
+# ── Argüman parsing ──────────────────────────
+DEIMOS_ONLY=0
+DEIMOS_DIR_ARG=""
+for arg in "$@"; do
+    if [[ "$arg" == "--deimos-only" ]]; then
+        DEIMOS_ONLY=1
+    elif [[ -z "$DEIMOS_DIR_ARG" && "$arg" != --* ]]; then
+        DEIMOS_DIR_ARG="$arg"
+    fi
+done
+DEIMOS_DIR="${DEIMOS_DIR_ARG:-${DEIMOS_DIR:-$HOME/.w101d_cache/Deimos}}"
 
 # ── WizardGraphicalClient.exe'yi bul ─────────
 _find_wiz_exe() {
@@ -123,11 +133,6 @@ if [[ ! -f "$DEIMOS_DIR/Deimos.py" ]]; then
 fi
 
 # ── --deimos-only modu: Wizard101'i başlatma ─
-DEIMOS_ONLY=0
-for arg in "$@"; do
-    [[ "$arg" == "--deimos-only" ]] && DEIMOS_ONLY=1
-done
-
 if [[ "$DEIMOS_ONLY" -eq 0 ]]; then
     echo "[run] Wizard101 başlatılıyor..."
     # Oyun kendi dizininden çalışmalı — aksi hâlde ./client.xml vb. bulunamaz
