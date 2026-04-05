@@ -21,27 +21,40 @@ fi
 
 # ── WizardGraphicalClient.exe'yi bul ─────────
 _find_wiz_exe() {
-    # Mac app bundle içindeki yaygın lokasyonlar
+    # 1. Bilinen sabit yollar
     local candidates=(
         "/Applications/Wizard101.app/Contents/Resources/Wizard101/Bin/WizardGraphicalClient.exe"
         "/Applications/Wizard101.app/Contents/Resources/drive_c/Program Files/Wizard101/Bin/WizardGraphicalClient.exe"
         "/Applications/Wizard101.app/Contents/Resources/drive_c/Program Files (x86)/Wizard101/Bin/WizardGraphicalClient.exe"
         "$HOME/Library/Application Support/Wizard101/drive_c/Program Files/Wizard101/Bin/WizardGraphicalClient.exe"
         "$HOME/Library/Application Support/Wizard101/drive_c/Program Files (x86)/Wizard101/Bin/WizardGraphicalClient.exe"
+        "$HOME/Library/Containers/com.kingsisle.wizard101/Data/Library/Application Support/Wizard101/drive_c/Program Files/Wizard101/Bin/WizardGraphicalClient.exe"
     )
     for c in "${candidates[@]}"; do
         [[ -f "$c" ]] && echo "$c" && return
     done
-    # Fallback: find ile ara
-    find /Applications/Wizard101.app -name "WizardGraphicalClient.exe" 2>/dev/null | head -1
+    # 2. find ile geniş arama — tüm olası yerler
+    find \
+        /Applications/Wizard101.app \
+        "$HOME/Library/Application Support" \
+        "$HOME/Library/Containers" \
+        -name "WizardGraphicalClient.exe" 2>/dev/null | head -1
 }
 
 WIZ_EXE=$(_find_wiz_exe)
 
 if [[ -z "$WIZ_EXE" ]]; then
-    echo "[run] HATA: WizardGraphicalClient.exe bulunamadı." >&2
-    echo "[run] Wizard101'in /Applications/Wizard101.app'te kurulu olduğundan emin olun." >&2
-    exit 1
+    echo "[run] WizardGraphicalClient.exe otomatik bulunamadı."
+    echo "[run] Aranılan yerler:"
+    echo "  /Applications/Wizard101.app/..."
+    echo "  ~/Library/Application Support/Wizard101/..."
+    echo ""
+    echo "[run] Lütfen exe'nin tam yolunu girin:"
+    read -r WIZ_EXE
+    if [[ ! -f "$WIZ_EXE" ]]; then
+        echo "[run] HATA: Dosya bulunamadı: $WIZ_EXE" >&2
+        exit 1
+    fi
 fi
 
 echo "[run] Wizard101 bulundu: $WIZ_EXE"
