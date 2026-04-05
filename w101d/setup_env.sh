@@ -91,22 +91,22 @@ WIZSPRINTER_DIR="$CACHE/wizsprinter"
 echo "[setup] wizwalker indiriliyor..."
 rm -rf "$WIZWALKER_DIR"
 git clone --quiet https://github.com/StarrFox/wizwalker.git "$WIZWALKER_DIR"
-# wizwalker regex<2023 ister ama cp313 wheel'ı yok; 2024+ binary wheel mevcut
-sed -i '' \
-    's|regex = ">=2022.1.18,<2023.0.0"|regex = ">=2024.0.0"|' \
-    "$WIZWALKER_DIR/pyproject.toml" 2>/dev/null || \
-sed -i \
-    's|regex = ">=2022.1.18,<2023.0.0"|regex = ">=2024.0.0"|' \
-    "$WIZWALKER_DIR/pyproject.toml"
 
 echo "[setup] wizsprinter indiriliyor..."
 rm -rf "$WIZSPRINTER_DIR"
 git clone --quiet https://github.com/Deimos-Wizard101/WizSprinter.git "$WIZSPRINTER_DIR"
 
-echo "[setup] wizwalker kuruluyor..."
+# wizwalker regex<2023 constraint'i cp313 ile uyumsuz.
+# --no-deps: version constraint kontrolünü bypass et.
+# Bağımlılıkları (regex dahil) zaten binary olarak önceden kurduk.
+echo "[setup] wizwalker kuruluyor (--no-deps)..."
+WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
+    -m pip install --quiet --no-deps --no-build-isolation "$WIZWALKER_DIR"
+
+echo "[setup] wizwalker bağımlılıkları kuruluyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
     -m pip install --quiet $NO_REGEX_BUILD --prefer-binary \
-        --no-build-isolation "$WIZWALKER_DIR"
+        pymem pywin32 websockets regex
 
 echo "[setup] wizsprinter kuruluyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
