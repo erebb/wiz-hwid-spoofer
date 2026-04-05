@@ -141,25 +141,22 @@ if [[ "$DEIMOS_ONLY" -eq 0 ]]; then
     if _wiz_running; then
         echo "[run] Wizard101 zaten çalışıyor."
     else
-        echo "[run] Wizard101 app üzerinden başlatılıyor..."
-        # 'open -a' → Mac app icon ile aynı şekilde başlatır.
-        # -L flag'i game asset'lerini remote'tan yüklemeye çalışır, başarısız olur.
-        # Normal app launch, patcher/launcher'ı da çalıştırır (assets doğru yüklenir).
-        open -a "Wizard101" 2>/dev/null || true
+        echo "[run] Wizard101 başlatılıyor (quick launcher)..."
+        # Oyun root dizininden çalışmalı — Bin/'in üstü.
+        # PatchConfig.xml, WizardMessages.xml vb. Bin/'in parent'ında.
+        WIZ_DIR=$(dirname "$WIZ_EXE")
+        WIZ_ROOT=$(dirname "$WIZ_DIR")
+        (cd "$WIZ_ROOT" && WINEPREFIX="$WINEPREFIX" "$WIZ_WINE" "$WIZ_EXE" -L login.us.wizard101.com 12000) &
+        WIZ_PID=$!
 
-        echo "[run] Wizard101'in açılması bekleniyor (en fazla 90 saniye)..."
-        for i in $(seq 1 45); do
-            _wiz_running && break
-            sleep 2
-        done
+        echo "[run] Wizard101 yükleniyor, bekleniyor (30 saniye)..."
+        sleep 30
 
-        if ! _wiz_running; then
-            echo "[run] UYARI: Wizard101 90sn içinde başlamadı." >&2
+        if ! kill -0 "$WIZ_PID" 2>/dev/null; then
+            echo "[run] HATA: Wizard101 başlamadan kapandı." >&2
             echo "[run] Wizard101'i kendiniz açın, sonra: bash run_deimos.sh --deimos-only" >&2
             exit 1
         fi
-        echo "[run] Wizard101 çalışıyor. Login ekranını bekleyin..."
-        sleep 5
     fi
 else
     echo "[run] --deimos-only: Wizard101 başlatılmıyor, sadece Deimos başlatılıyor."
