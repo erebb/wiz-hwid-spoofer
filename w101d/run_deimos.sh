@@ -122,25 +122,40 @@ _build_propsys_stub() {
     tmp=$(mktemp -d)
     trap "rm -rf '$tmp'" RETURN
 
-    # Minimal stub — sadece VariantToString'i dışa aktarır
+    # Minimal stub — windows.h YOK, CRT YOK, sıfır dış bağımlılık.
+    # windows.h propsys'ten ek import'lar ekler → Wine unimplemented stub'ları tetikler.
     cat > "$tmp/propsys_stub.c" << 'CEOF'
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
+/* propsys minimal stub — NO headers, NO CRT */
+typedef unsigned short  wchar_t;
+typedef long            HRESULT;
+typedef unsigned int    UINT;
+typedef int             BOOL;
+typedef void*           HINSTANCE;
+typedef unsigned long   DWORD;
+typedef void*           LPVOID;
 
-/* VariantToString: propvariant'ı string'e çevirir.
-   Wine'ın eski sürümlerinde eksik — stub olarak S_OK ile boş string döner. */
+/* VariantToString: propvariant → string.
+   Wine 6.x bu fonksiyonu implemente etmemiş.
+   Stub: boş string döner, S_OK (0) çıkışıyla devam et. */
 __declspec(dllexport)
-HRESULT VariantToString(const void* propvar, WCHAR* psz, UINT cch) {
-    if (psz && cch > 0) psz[0] = L'\0';
-    return S_OK;
+HRESULT VariantToString(const void* propvar, wchar_t* psz, UINT cch)
+{
+    if (psz && cch > 0) *psz = (wchar_t)0;
+    return 0; /* S_OK */
 }
 
-BOOL WINAPI DllMain(HINSTANCE h, DWORD r, LPVOID p) { return TRUE; }
+__declspec(dllexport)
+BOOL __stdcall DllMain(HINSTANCE h, DWORD r, LPVOID p)
+{
+    return 1; /* TRUE */
+}
 CEOF
 
     if x86_64-w64-mingw32-gcc -shared -o "$tmp/propsys.dll" \
             "$tmp/propsys_stub.c" \
-            -Wl,--out-implib,"$tmp/libpropsys.a" \
+            -nostdlib -nostartfiles \
+            -Wl,-e,DllMain \
+            -lkernel32 \
             2>/dev/null; then
         cp "$tmp/propsys.dll" "$out/propsys.dll"
         echo "[run] propsys.dll stub derlendi ve kopyalandı."
@@ -156,7 +171,9 @@ _fix_propsys() {
     local sys32="$prefix/drive_c/windows/system32"
 
     # Önce daha önce derlenmiş stub'ı kontrol et
+    # Eski stub'ı sil — windows.h'li versiyon hatalıydı, yeniden derlensin
     local cached_stub="$HOME/.w101d_cache/propsys_stub.dll"
+    [[ -f "$cached_stub" ]] && rm -f "$cached_stub"
 
     # Sistem genelinde mevcut propsys.dll ara (VariantToString'i olan bir versiyon)
     local propsys_src=""
