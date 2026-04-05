@@ -13,6 +13,10 @@ PYTHON_DIR="$WINEPREFIX/drive_c/Python313"
 SITE_PKG="$PYTHON_DIR/Lib/site-packages"
 WIN_PYTHON="$PYTHON_DIR/python.exe"
 
+WIZWALKER_DIR="$CACHE/wizwalker"
+WIZSPRINTER_DIR="$CACHE/wizsprinter"
+DEIMOS_DIR="$CACHE/Deimos"
+
 mkdir -p "$CACHE"
 
 # ── Eski embeddable kalıntısını temizle ───────
@@ -55,12 +59,24 @@ echo "[setup] pip güncelleniyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
     -m pip install --quiet --upgrade pip
 
-# ── pip bağımlılıkları ────────────────────────
+# ── Deimos reposunu indir ────────────────────
+# PySimpleGUI wheel ve kaynak kod için
+echo "[setup] Deimos reposu indiriliyor..."
+rm -rf "$DEIMOS_DIR"
+git clone --quiet https://github.com/Deimos-Wizard101/Deimos-Wizard101.git "$DEIMOS_DIR"
+
+# ── pip bağımlılıkları (requirements.txt'ten) ─
 echo "[setup] Paketler kuruluyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
     -m pip install --quiet --only-binary=regex --prefer-binary \
         "regex>=2024.0.0" \
-        "loguru>=0.5.1" \
+        "thefuzz>=0.22.1" \
+        "loguru>=0.7.2" \
+        "pyperclip>=1.9.0" \
+        "requests>=2.32.3" \
+        "pypresence>=4.3.0" \
+        "pywin32>=306" \
+        "pyyaml>=6.0.1" \
         "pymem==1.8.3" \
         "appdirs>=1.4.4" \
         "aiofiles>=0.7.0" \
@@ -69,34 +85,33 @@ WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
         "terminaltables>=3.1.0" \
         "janus>=0.6.1" \
         "pefile>=2021.5.24" \
-        "lark>=1.1.9" \
-        "pywin32>=306" \
-        "pypresence>=4.3.0" \
-        "PySimpleGUI==4.60.5.1" \
-        "pyyaml>=6.0.1" \
-        "requests>=2.32.3" \
-        "pyperclip>=1.9.0" \
-        "thefuzz>=0.22.1"
+        "lark>=1.1.9"
 
-# ── wizwalker: source'u direkt kopyala ────────
-# Build sistemi yok → poetry/regex constraint sorunu yok
-WIZWALKER_DIR="$CACHE/wizwalker"
-echo "[setup] wizwalker indiriliyor (Deimos fork)..."
+# PySimpleGUI — Deimos'un kendi wheel'ından (PyPI'dan kaldırıldı)
+echo "[setup] PySimpleGUI kuruluyor (Deimos wheel)..."
+WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
+    -m pip install --quiet "$DEIMOS_DIR/wheels/PySimpleGUI-4.60.5-py3-none-any.whl"
+
+# ── wizwalker: Deimos fork, development branch ─
+echo "[setup] wizwalker indiriliyor (Deimos fork / development)..."
 rm -rf "$WIZWALKER_DIR"
-# Deimos-Wizard101/wizwalker kullanılmalı — Primitive sınıfı burada var
-# StarrFox/wizwalker'da Primitive yok, wizsprinter import hatası verir
 git clone --quiet --branch development \
     https://github.com/Deimos-Wizard101/wizwalker.git "$WIZWALKER_DIR"
 
-# cli modülünü kaldır: aiomonitor → telnetlib (Python 3.13'te yok)
+# cli import kaldır: aiomonitor → telnetlib → Python 3.13'te yok
+echo "[setup] wizwalker patch ediliyor..."
 python3 -c "
 import pathlib
 init = pathlib.Path('$WIZWALKER_DIR/wizwalker/__init__.py')
 t = init.read_text()
-t = t.replace('from . import cli, combat, memory, utils',
-              'from . import combat, memory, utils')
-t = t.replace('from . import cli, memory, utils',
-              'from . import memory, utils')
+for old in [
+    'from . import cli, combat, memory, utils',
+    'from . import cli, memory, utils',
+    'from . import cli, utils',
+]:
+    if old in t:
+        t = t.replace(old, old.replace('cli, ', ''))
+        break
 init.write_text(t)
 print('[setup] wizwalker/__init__.py patch OK')
 "
@@ -105,14 +120,13 @@ echo "[setup] wizwalker site-packages'a kopyalanıyor..."
 rm -rf "$SITE_PKG/wizwalker"
 cp -r "$WIZWALKER_DIR/wizwalker" "$SITE_PKG/wizwalker"
 
-# ── wizsprinter: source'u direkt kopyala ──────
-WIZSPRINTER_DIR="$CACHE/wizsprinter"
-echo "[setup] wizsprinter indiriliyor..."
+# ── wizsprinter: lib-update branch ────────────
+echo "[setup] wizsprinter indiriliyor (lib-update branch)..."
 rm -rf "$WIZSPRINTER_DIR"
-git clone --quiet https://github.com/Deimos-Wizard101/WizSprinter.git "$WIZSPRINTER_DIR"
+git clone --quiet --branch lib-update \
+    https://github.com/Deimos-Wizard101/WizSprinter.git "$WIZSPRINTER_DIR"
 
 echo "[setup] wizsprinter site-packages'a kopyalanıyor..."
-# WizSprinter wizwalker'ın extension'ı: wizwalker/extensions/wizsprinter/ altında
 mkdir -p "$SITE_PKG/wizwalker/extensions"
 rm -rf "$SITE_PKG/wizwalker/extensions/wizsprinter"
 cp -r "$WIZSPRINTER_DIR/wizwalker/extensions/wizsprinter" \
@@ -132,5 +146,5 @@ import lark;        print('  lark       : OK')
 "
 
 echo ""
-echo "[setup] Tamamlandı!"
-echo "  bash run_deimos.sh /path/to/Deimos-Wizard101"
+echo "[setup] Tamamlandı! Deimos klasörü: $DEIMOS_DIR"
+echo "  bash run_deimos.sh"

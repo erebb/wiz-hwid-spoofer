@@ -13,13 +13,8 @@ source "$SCRIPT_DIR/detect_wine.sh"
 # ─────────────────────────────────────────────
 # Deimos klasörünü belirle
 # ─────────────────────────────────────────────
-DEIMOS_DIR="${1:-${DEIMOS_DIR:-}}"
-
-if [[ -z "$DEIMOS_DIR" ]]; then
-    echo "[run_deimos] HATA: Deimos klasörü belirtilmedi." >&2
-    echo "[run_deimos] Kullanım: bash w101d/run_deimos.sh /path/to/Deimos-Wizard101" >&2
-    exit 1
-fi
+# setup_env.sh Deimos'u buraya klonlar — argüman verilmezse orası kullanılır
+DEIMOS_DIR="${1:-${DEIMOS_DIR:-$HOME/.w101d_cache/Deimos}}"
 
 if [[ ! -f "$DEIMOS_DIR/Deimos.py" ]]; then
     echo "[run_deimos] HATA: '$DEIMOS_DIR/Deimos.py' bulunamadı." >&2
