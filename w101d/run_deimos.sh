@@ -9,16 +9,8 @@ source "$SCRIPT_DIR/detect_wine.sh"
 DEIMOS_DIR="${1:-${DEIMOS_DIR:-$HOME/.w101d_cache/Deimos}}"
 # Python: setup_env.sh ~/.w101d_wine'a kurdu — onu Wizard101'in prefix'ine kopyala
 OUR_PYTHON="$HOME/.w101d_wine/drive_c/Python313"
-WIN_PYTHON="$WINEPREFIX/drive_c/Python313/python.exe"
 
-if [[ ! -f "$WIN_PYTHON" && -d "$OUR_PYTHON" ]]; then
-    echo "[run] Python, Wizard101 prefix'ine kopyalanıyor..."
-    cp -r "$OUR_PYTHON" "$WINEPREFIX/drive_c/Python313"
-    # site-packages de kopyala
-    cp -r "$HOME/.w101d_wine/drive_c/Python313" "$WINEPREFIX/drive_c/" 2>/dev/null || true
-fi
-
-if [[ ! -f "$WIN_PYTHON" ]]; then
+if [[ ! -d "$OUR_PYTHON" ]]; then
     echo "[run] HATA: Wine içinde Python bulunamadı. Önce setup_env.sh çalıştırın." >&2
     exit 1
 fi
@@ -69,6 +61,14 @@ echo "[run] Wizard101 bulundu: $WIZ_EXE"
 WIZ_PREFIX=$(echo "$WIZ_EXE" | sed 's|/drive_c/.*||')
 echo "[run] Wizard101 Wine prefix: $WIZ_PREFIX"
 echo "[run] Bizim Homebrew Wine  : $WINE_BIN"
+
+# Python'u Wizard101'in prefix'ine kopyala (henüz yoksa)
+# Bu WINEPREFIX değiştirilmeden önce yapılmalı
+WIN_PYTHON="$WIZ_PREFIX/drive_c/Python313/python.exe"
+if [[ ! -f "$WIN_PYTHON" ]]; then
+    echo "[run] Python, Wizard101 prefix'ine kopyalanıyor: $WIZ_PREFIX/drive_c/Python313"
+    cp -r "$OUR_PYTHON" "$WIZ_PREFIX/drive_c/Python313"
+fi
 
 # Her iki uygulama AYNI WINEPREFIX'te çalışmalı → aynı wineserver → memory erişimi OK
 export WINEPREFIX="$WIZ_PREFIX"
