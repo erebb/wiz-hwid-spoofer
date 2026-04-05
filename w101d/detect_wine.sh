@@ -1,103 +1,128 @@
 #!/usr/bin/env bash
-# detect_wine.sh — Wizard101 Mac için Wine binary ve WINEPREFIX'i tespit eder.
+# detect_wine.sh — Homebrew Wine'ı otomatik kurar ve Deimos için WINEPREFIX hazırlar.
 # Bu script doğrudan çalıştırılmaz; diğer scriptler tarafından 'source' edilir.
 #
 # Kullanım:  source "$(dirname "$0")/detect_wine.sh"
-# Sonuç:     WINE_BIN ve WINEPREFIX export edilir.
+# Sonuç:     WINE_BIN, WINEPREFIX, WINEARCH export edilir.
 #
-# NOT: WINEPREFIX (oyunun kurulu olduğu sanal Windows dosya sistemi) Wizard101.app
-# içinde DEĞİLDİR. Genellikle ~/Library/ altında ayrı bir klasördedir.
-# Manuel override: WINEPREFIX=/yol/prefix bash w101d/run_deimos.sh ...
+# NOT: Wizard101'in bundled Wine'ı Python'u crash ettirir.
+#      Bu script Homebrew Wine kullanır — yoksa otomatik kurar.
 
 set -euo pipefail
 
-_wiz_app="/Applications/Wizard101.app"
+# Deimos için ayrı Wine prefix (Wizard101'in prefix'ine dokunmaz)
+DEIMOS_PREFIX="$HOME/.w101d_wine"
 
-# --- Wine binary tespiti ---
-_find_wine_bin() {
-    # 1. Wizard101.app bundle içindeki Wine binary (genellikle Contents/Resources/wine/)
-    if [[ -d "$_wiz_app" ]]; then
-        local bundled
-        bundled=$(find "$_wiz_app/Contents" -type f \( -name "wine64" -o -name "wine" \) 2>/dev/null | grep -v ".framework" | head -1)
-        if [[ -n "$bundled" && -x "$bundled" ]]; then
-            echo "$bundled"
-            return
-        fi
+# ─────────────────────────────────────────────
+# Homebrew kurulu mu? Değilse otomatik kur.
+# ─────────────────────────────────────────────
+_ensure_homebrew() {
+    if command -v brew &>/dev/null; then
+        return
     fi
 
-    # 2. Homebrew Wine (Apple Silicon: /opt/homebrew, Intel: /usr/local)
+    echo "[detect_wine] Homebrew bulunamadı, kuruluyor..."
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+    # Apple Silicon için PATH'e ekle
+    if [[ -f "/opt/homebrew/bin/brew" ]]; then
+        eval "$(/opt/homebrew/bin/brew shellenv)"
+    elif [[ -f "/usr/local/bin/brew" ]]; then
+        eval "$(/usr/local/bin/brew shellenv)"
+    fi
+
+    echo "[detect_wine] Homebrew kuruldu."
+}
+
+# ─────────────────────────────────────────────
+# wine-stable kurulu mu? Değilse otomatik kur.
+# ─────────────────────────────────────────────
+_ensure_wine() {
+    # Mevcut Wine binary'lerini kontrol et
     for candidate in \
         "/opt/homebrew/bin/wine64" \
         "/opt/homebrew/bin/wine" \
         "/usr/local/bin/wine64" \
-        "/usr/local/bin/wine" \
-        "$(brew --prefix 2>/dev/null)/bin/wine64" \
-        "$(brew --prefix 2>/dev/null)/bin/wine"; do
+        "/usr/local/bin/wine"; do
+        if [[ -x "$candidate" ]]; then
+            return
+        fi
+    done
+
+    # brew prefix üzerinden de dene
+    if command -v brew &>/dev/null; then
+        local prefix
+        prefix=$(brew --prefix 2>/dev/null)
+        for candidate in "$prefix/bin/wine64" "$prefix/bin/wine"; do
+            if [[ -x "$candidate" ]]; then
+                return
+            fi
+        done
+    fi
+
+    echo "[detect_wine] wine-stable bulunamadı, kuruluyor..."
+    brew install --cask wine-stable
+    echo "[detect_wine] wine-stable kuruldu."
+}
+
+# ─────────────────────────────────────────────
+# Wine binary'sini bul
+# ─────────────────────────────────────────────
+_find_wine_bin() {
+    for candidate in \
+        "/opt/homebrew/bin/wine64" \
+        "/opt/homebrew/bin/wine" \
+        "/usr/local/bin/wine64" \
+        "/usr/local/bin/wine"; do
         if [[ -x "$candidate" ]]; then
             echo "$candidate"
             return
         fi
     done
 
+    if command -v brew &>/dev/null; then
+        local prefix
+        prefix=$(brew --prefix 2>/dev/null)
+        for candidate in "$prefix/bin/wine64" "$prefix/bin/wine"; do
+            if [[ -x "$candidate" ]]; then
+                echo "$candidate"
+                return
+            fi
+        done
+    fi
+
     echo ""
 }
 
-# --- WINEPREFIX tespiti ---
-# WINEPREFIX, Wizard101.app DIŞINDA ~/Library/ altında bulunur.
-# Oyunun sanal Windows dosya sistemi (drive_c/) burada saklanır.
-_find_wineprefix() {
-    local appdata="$HOME/Library/Application Support"
-    local containers="$HOME/Library/Containers"
+# ─────────────────────────────────────────────
+# Homebrew ve Wine kur (gerekirse)
+# ─────────────────────────────────────────────
+_ensure_homebrew
+_ensure_wine
 
-    # KingsIsle / Wizard101 için bilinen WINEPREFIX konumları
-    for candidate in \
-        "$appdata/com.kingsisle.wizard101/wine" \
-        "$appdata/com.kingsisle.wizard101" \
-        "$appdata/Wizard101/wine" \
-        "$appdata/Wizard101/wineprefix" \
-        "$appdata/Wizard101" \
-        "$appdata/KingsIsle Entertainment/Wizard101/wine" \
-        "$appdata/KingsIsle Entertainment/Wizard101" \
-        "$containers/com.kingsisle.wizard101/Data/wine" \
-        "$HOME/Library/Wizard101" \
-        "$HOME/.wizard101" \
-        "$HOME/.wine"; do
-        # drive_c varsa geçerli bir Wine prefix'idir
-        if [[ -d "$candidate/drive_c" ]]; then
-            echo "$candidate"
-            return
-        fi
-    done
-
-    # drive_c bulunamadıysa — Wizard101.exe'yi ara (prefix'i tahmin et)
-    local wiz_exe
-    wiz_exe=$(find "$HOME/Library" -name "Wizard101.exe" -maxdepth 8 2>/dev/null | head -1)
-    if [[ -n "$wiz_exe" ]]; then
-        # Wizard101.exe genellikle {PREFIX}/drive_c/.../Wizard101/Bin/Wizard101.exe
-        # drive_c'nin üst dizinini bul
-        local drive_c
-        drive_c=$(echo "$wiz_exe" | sed 's|/drive_c/.*|/drive_c|')
-        echo "$(dirname "$drive_c")"
-        return
-    fi
-
-    # Hiçbiri bulunamazsa varsayılan
-    echo "$HOME/.wine"
-}
-
-# --- Export ---
+# ─────────────────────────────────────────────
+# Wine binary'sini export et
+# ─────────────────────────────────────────────
 WINE_BIN=$(_find_wine_bin)
 
 if [[ -z "$WINE_BIN" ]]; then
-    echo "[detect_wine] HATA: Wine binary bulunamadı." >&2
-    echo "[detect_wine] Çözüm: 'brew install wine-stable' komutunu çalıştırın." >&2
+    echo "[detect_wine] HATA: Wine kuruldu ama binary bulunamadı." >&2
+    echo "[detect_wine] Terminal'i kapatıp açın ve tekrar deneyin." >&2
     exit 1
 fi
 
-WINEPREFIX=$(_find_wineprefix)
-WINEARCH="${WINEARCH:-win64}"
+# ─────────────────────────────────────────────
+# Deimos Wine prefix'ini hazırla
+# ─────────────────────────────────────────────
+WINEPREFIX="$DEIMOS_PREFIX"
+WINEARCH="win64"
 
 export WINE_BIN WINEPREFIX WINEARCH
+
+if [[ ! -d "$WINEPREFIX/drive_c" ]]; then
+    echo "[detect_wine] Deimos Wine prefix'i oluşturuluyor: $WINEPREFIX"
+    WINEPREFIX="$WINEPREFIX" WINEARCH="$WINEARCH" "$WINE_BIN" wineboot --init 2>/dev/null || true
+fi
 
 echo "[detect_wine] Wine    : $WINE_BIN"
 echo "[detect_wine] Prefix  : $WINEPREFIX"

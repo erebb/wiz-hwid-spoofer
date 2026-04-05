@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# setup_env.sh — Wizard101'in kendi Wine'ına Python (embeddable) + Deimos bağımlılıklarını kurar.
-# Tek seferlik kurulum scriptidir. Python installer (.exe) kullanmaz — zip ile extract eder.
+# setup_env.sh — Homebrew Wine içine Python + Deimos bağımlılıklarını otomatik kurar.
+# Tek seferlik kurulum scriptidir.
 #
 # Kullanım: bash setup_env.sh
 
@@ -15,46 +15,51 @@ EMBED_URL="https://www.python.org/ftp/python/${PYTHON_VERSION}/${EMBED_ZIP}"
 GET_PIP_URL="https://bootstrap.pypa.io/get-pip.py"
 DOWNLOAD_DIR="$HOME/.w101d_cache"
 
-# Wine prefix içindeki Python kurulum dizini
 PYTHON_DIR="$WINEPREFIX/drive_c/Python313"
 WIN_PYTHON="$PYTHON_DIR/python.exe"
 
+mkdir -p "$DOWNLOAD_DIR"
+
 # ─────────────────────────────────────────────
-# 1. Eski Python311 varsa kaldır
+# 1. winetricks otomatik kur (gerekli DLL'ler için)
 # ─────────────────────────────────────────────
-OLD_PYTHON_DIR="$WINEPREFIX/drive_c/Python311"
-if [[ -d "$OLD_PYTHON_DIR" ]]; then
-    echo "[setup] Eski Python311 siliniyor..."
-    rm -rf "$OLD_PYTHON_DIR"
+if ! command -v winetricks &>/dev/null; then
+    echo "[setup] winetricks kuruluyor..."
+    brew install winetricks
 fi
 
 # ─────────────────────────────────────────────
-# 2. Embeddable Python zip'i indir
+# 2. Gerekli Windows DLL'lerini kur
+#    vcrun2019 = Visual C++ runtime (pywin32 için şart)
+#    dotnet48  = .NET 4.8 (bazı Python paketleri için)
 # ─────────────────────────────────────────────
-mkdir -p "$DOWNLOAD_DIR"
+echo "[setup] Gerekli Windows DLL'leri kuruluyor (vcrun2019)..."
+WINEPREFIX="$WINEPREFIX" winetricks --unattended vcrun2019 2>/dev/null || \
+    echo "[setup] vcrun2019 kurulumu atlandı (zaten kurulu olabilir)."
 
+# ─────────────────────────────────────────────
+# 3. Embeddable Python zip'i indir
+# ─────────────────────────────────────────────
 if [[ ! -f "$DOWNLOAD_DIR/$EMBED_ZIP" ]]; then
-    echo "[setup] Python $PYTHON_VERSION embeddable indiriliyor..."
+    echo "[setup] Python $PYTHON_VERSION indiriliyor..."
     curl -L --progress-bar -o "$DOWNLOAD_DIR/$EMBED_ZIP" "$EMBED_URL"
 else
     echo "[setup] Python zip zaten mevcut, atlanıyor."
 fi
 
 # ─────────────────────────────────────────────
-# 3. Wine prefix içine extract et
+# 4. Wine prefix içine extract et
 # ─────────────────────────────────────────────
 if [[ ! -f "$WIN_PYTHON" ]]; then
-    echo "[setup] Python Wine prefix'e extract ediliyor..."
+    echo "[setup] Python extract ediliyor: $PYTHON_DIR"
     mkdir -p "$PYTHON_DIR"
     unzip -q "$DOWNLOAD_DIR/$EMBED_ZIP" -d "$PYTHON_DIR"
-    echo "[setup] Python extract edildi: $PYTHON_DIR"
 else
     echo "[setup] Python zaten mevcut: $WIN_PYTHON"
 fi
 
 # ─────────────────────────────────────────────
-# 4. Embeddable Python'da site-packages'i etkinleştir
-#    (python313._pth dosyasında 'import site' satırını aç)
+# 5. site-packages etkinleştir (python313._pth)
 # ─────────────────────────────────────────────
 PTH_FILE="$PYTHON_DIR/python313._pth"
 if [[ -f "$PTH_FILE" ]] && grep -q "^#import site" "$PTH_FILE"; then
@@ -63,7 +68,7 @@ if [[ -f "$PTH_FILE" ]] && grep -q "^#import site" "$PTH_FILE"; then
 fi
 
 # ─────────────────────────────────────────────
-# 5. pip kur (get-pip.py ile)
+# 6. pip kur
 # ─────────────────────────────────────────────
 if [[ ! -f "$DOWNLOAD_DIR/get-pip.py" ]]; then
     echo "[setup] get-pip.py indiriliyor..."
@@ -74,13 +79,14 @@ echo "[setup] pip kuruluyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" "$DOWNLOAD_DIR/get-pip.py" --quiet
 
 # ─────────────────────────────────────────────
-# 6. Build backend'leri kur
+# 7. Build backend'ler
 # ─────────────────────────────────────────────
-echo "[setup] build backend'ler kuruluyor (poetry, hatchling)..."
-WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet poetry-core poetry hatchling
+echo "[setup] Build backend'ler kuruluyor..."
+WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet \
+    poetry-core poetry hatchling
 
 # ─────────────────────────────────────────────
-# 7. Deimos bağımlılıklarını kur
+# 8. Deimos bağımlılıkları
 # ─────────────────────────────────────────────
 echo "[setup] Deimos bağımlılıkları kuruluyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet \
@@ -93,20 +99,26 @@ WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet \
     "pyperclip>=1.9.0" \
     "thefuzz>=0.22.1"
 
+# pywin32 post-install (servis DLL'lerini register eder)
+echo "[setup] pywin32 post-install çalıştırılıyor..."
+WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
+    "$PYTHON_DIR/Lib/site-packages/win32/pythonservice.exe" \
+    --register 2>/dev/null || true
+
 # ─────────────────────────────────────────────
-# 8. wizwalker ve wizsprinter
+# 9. wizwalker + wizsprinter
 # ─────────────────────────────────────────────
 WIZWALKER_DIR="$DOWNLOAD_DIR/wizwalker"
 WIZSPRINTER_DIR="$DOWNLOAD_DIR/wizsprinter"
 
-echo "[setup] wizwalker indiriliyor (Mac git ile)..."
+echo "[setup] wizwalker indiriliyor..."
 if [[ ! -d "$WIZWALKER_DIR" ]]; then
     git clone --quiet https://github.com/StarrFox/wizwalker.git "$WIZWALKER_DIR"
 else
     git -C "$WIZWALKER_DIR" pull --quiet
 fi
 
-echo "[setup] wizsprinter indiriliyor (Mac git ile)..."
+echo "[setup] wizsprinter indiriliyor..."
 if [[ ! -d "$WIZSPRINTER_DIR" ]]; then
     git clone --quiet https://github.com/Deimos-Wizard101/WizSprinter.git "$WIZSPRINTER_DIR"
 else
@@ -114,24 +126,26 @@ else
 fi
 
 echo "[setup] wizwalker kuruluyor..."
-WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet --no-build-isolation "$WIZWALKER_DIR"
+WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
+    -m pip install --quiet --no-build-isolation "$WIZWALKER_DIR"
 
 echo "[setup] wizsprinter kuruluyor..."
-WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet --no-build-isolation "$WIZSPRINTER_DIR"
+WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
+    -m pip install --quiet --no-build-isolation "$WIZSPRINTER_DIR"
 
 # ─────────────────────────────────────────────
-# 9. Doğrulama
+# 10. Doğrulama
 # ─────────────────────────────────────────────
 echo ""
 echo "[setup] Kurulum doğrulanıyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -c "
 import sys
-print(f'  Python : {sys.version.split()[0]}')
-import wizwalker; print('  wizwalker : OK')
-import win32api;  print('  pywin32   : OK')
+print(f'  Python     : {sys.version.split()[0]}')
+import wizwalker;   print('  wizwalker  : OK')
+import win32api;    print('  pywin32    : OK')
 import PySimpleGUI; print('  PySimpleGUI: OK')
 "
 
 echo ""
-echo "[setup] Kurulum tamamlandı! Deimos'u başlatmak için:"
+echo "[setup] Tamamlandı! Deimos başlatmak için:"
 echo "  bash run_deimos.sh /path/to/Deimos-Wizard101"
