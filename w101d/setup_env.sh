@@ -79,14 +79,22 @@ echo "[setup] pip kuruluyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" "$DOWNLOAD_DIR/get-pip.py" --quiet
 
 # ─────────────────────────────────────────────
-# 7. Build backend'ler
+# 7. setuptools + wheel (build backend için şart)
+#    Embeddable zip bunları içermez, ayrıca kurulmalı.
+# ─────────────────────────────────────────────
+echo "[setup] setuptools + wheel kuruluyor..."
+WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet \
+    setuptools wheel
+
+# ─────────────────────────────────────────────
+# 8. Build backend'ler
 # ─────────────────────────────────────────────
 echo "[setup] Build backend'ler kuruluyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet \
     poetry-core poetry hatchling
 
 # ─────────────────────────────────────────────
-# 8. Deimos bağımlılıkları
+# 9. Deimos bağımlılıkları
 # ─────────────────────────────────────────────
 echo "[setup] Deimos bağımlılıkları kuruluyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" -m pip install --quiet \
@@ -106,7 +114,7 @@ WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
     --register 2>/dev/null || true
 
 # ─────────────────────────────────────────────
-# 9. wizwalker + wizsprinter
+# 10. wizwalker + wizsprinter
 # ─────────────────────────────────────────────
 WIZWALKER_DIR="$DOWNLOAD_DIR/wizwalker"
 WIZSPRINTER_DIR="$DOWNLOAD_DIR/wizsprinter"
@@ -134,7 +142,7 @@ WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
     -m pip install --quiet --no-build-isolation "$WIZSPRINTER_DIR"
 
 # ─────────────────────────────────────────────
-# 10. Doğrulama
+# 11. Doğrulama
 # ─────────────────────────────────────────────
 echo ""
 echo "[setup] Kurulum doğrulanıyor..."
