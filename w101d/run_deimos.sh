@@ -124,9 +124,11 @@ _fix_propsys() {
     done
 
     if [[ -z "$propsys_src" ]]; then
-        # Brew Cellar'da ara
-        propsys_src=$(find /opt/homebrew/Cellar -path "*/wine/x86_64-windows/propsys.dll" 2>/dev/null | head -1)
-        [[ -z "$propsys_src" ]] && propsys_src=$(find /usr/local/Cellar -path "*/wine/x86_64-windows/propsys.dll" 2>/dev/null | head -1)
+        # Brew Cellar'da ara — || true: dizin yoksa find exit 1 verir, pipefail bunu yakalar
+        propsys_src=$(find /opt/homebrew/Cellar -path "*/wine/x86_64-windows/propsys.dll" 2>/dev/null | head -1) || true
+        if [[ -z "$propsys_src" ]]; then
+            propsys_src=$(find /usr/local/Cellar -path "*/wine/x86_64-windows/propsys.dll" 2>/dev/null | head -1) || true
+        fi
     fi
 
     if [[ -n "$propsys_src" ]]; then
