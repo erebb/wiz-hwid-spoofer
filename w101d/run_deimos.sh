@@ -242,8 +242,7 @@ if [[ "$DEIMOS_ONLY" -eq 0 ]]; then
             echo "[run] Wizard101'i kendiniz açın, sonra: bash run_deimos.sh --deimos-only" >&2
             exit 1
         fi
-        echo "[run] Wizard101 çalışıyor. Login/yükleme tamamlanana kadar bekliyoruz..."
-        sleep 10
+        echo "[run] Wizard101 çalışıyor."
     fi
 else
     echo "[run] --deimos-only: Wizard101 başlatılmıyor."
@@ -252,6 +251,16 @@ else
         echo "[run] Wizard101'i önce açın, sonra bu scripti tekrar çalıştırın."
     fi
 fi
+
+# ── Oyunun tam yüklenmesini bekle ────────────
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  Wizard101'e giriş yap, karakterini seç ve"
+echo "  OYUN DÜNYASINA GİR (tamamen yüklensin)."
+echo "  Hazır olunca bu terminale gel ve ENTER'a bas."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+read -r -p "  [ENTER] Deimos başlasın: "
+echo ""
 
 # ── Deimos'u Wizard101'in wine'ıyla başlat ───
 # Homebrew wine farklı wineserver protokolü (655 vs 930) → version mismatch.
