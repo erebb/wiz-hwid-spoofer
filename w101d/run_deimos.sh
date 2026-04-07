@@ -154,8 +154,9 @@ DEOF
     local build_log="$tmp/build.log"
     if x86_64-w64-mingw32-gcc -shared -o "$tmp/propsys.dll" \
             "$tmp/propsys_stub.c" "$tmp/propsys.def" \
+            -static-libgcc \
             2>"$build_log"; then
-        cp "$tmp/propsys.dll" "$out/propsys_stub.dll"
+        cp "$tmp/propsys.dll" "$out/propsys_stub_v2.dll"
         echo "[run] propsys.dll stub derlendi ve kopyalandı."
         return 0
     else
@@ -170,9 +171,8 @@ _fix_propsys() {
     local sys32="$prefix/drive_c/windows/system32"
 
     # Önce daha önce derlenmiş stub'ı kontrol et
-    # Eski stub'ı sil — windows.h'li versiyon hatalıydı, yeniden derlensin
-    local cached_stub="$HOME/.w101d_cache/propsys_stub.dll"
-    [[ -f "$cached_stub" ]] && rm -f "$cached_stub"
+    # v2 = -static-libgcc ile derlendi (libgcc_s.dll bağımlılığı yok)
+    local cached_stub="$HOME/.w101d_cache/propsys_stub_v2.dll"
 
     # Sistem genelinde mevcut propsys.dll ara (VariantToString'i olan bir versiyon)
     local propsys_src=""
@@ -224,7 +224,7 @@ _fix_propsys() {
         echo "[run] propsys.dll bulunamadı — mingw-w64 ile stub derleniyor..."
         mkdir -p "$HOME/.w101d_cache"
         if _build_propsys_stub "$HOME/.w101d_cache"; then
-            cp "$HOME/.w101d_cache/propsys_stub.dll" "$sys32/propsys.dll" 2>/dev/null || true
+            cp "$HOME/.w101d_cache/propsys_stub_v2.dll" "$sys32/propsys.dll" 2>/dev/null || true
         else
             echo "[run] UYARI: propsys.dll stub derlenemedi — Python crash devam edecek." >&2
             return
