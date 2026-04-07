@@ -169,68 +169,26 @@ DEOF
 _fix_propsys() {
     local prefix="$1"
     local sys32="$prefix/drive_c/windows/system32"
-
-    # Önce daha önce derlenmiş stub'ı kontrol et
     # v2 = -static-libgcc ile derlendi (libgcc_s.dll bağımlılığı yok)
     local cached_stub="$HOME/.w101d_cache/propsys_stub_v2.dll"
 
-    # Sistem genelinde mevcut propsys.dll ara (VariantToString'i olan bir versiyon)
-    local propsys_src=""
+    # NOT: Wine'ın kendi lib dizinlerindeki propsys.dll'leri Wine 6.0'da
+    # VariantToString'i implemente etmemiş (sadece "unimplemented relay" içeriyor).
+    # Bu yüzden sistem propsys.dll'i ASLA kullanmıyoruz — daima kendi stub'ımız.
 
-    # 1. Wizard101.app kendi wine lib'i
-    local wiz_wine_dir
-    wiz_wine_dir=$(dirname "$WIZ_WINE")
-    for try in \
-        "$(dirname "$wiz_wine_dir")/lib/wine/x86_64-windows/propsys.dll" \
-        "$(dirname "$(dirname "$wiz_wine_dir")")/lib/wine/x86_64-windows/propsys.dll"; do
-        [[ -f "$try" ]] && propsys_src="$try" && break
-    done
-
-    # 2. Homebrew wine lib
-    if [[ -z "$propsys_src" ]]; then
-        local hb_root
-        hb_root=$(dirname "$(dirname "$WINE_BIN")")
-        for arch in x86_64-windows i386-windows; do
-            local f="$hb_root/lib/wine/$arch/propsys.dll"
-            [[ -f "$f" ]] && propsys_src="$f" && break
-        done
-    fi
-
-    # 3. Brew Cellar geniş arama
-    if [[ -z "$propsys_src" ]]; then
-        for cellar in /opt/homebrew/Cellar /usr/local/Cellar; do
-            [[ -d "$cellar" ]] || continue
-            propsys_src=$(find "$cellar" -name "propsys.dll" 2>/dev/null | head -1) || true
-            [[ -n "$propsys_src" ]] && break
-        done
-    fi
-
-    # 4. Wizard101.app içinde ara
-    if [[ -z "$propsys_src" ]]; then
-        propsys_src=$(find /Applications/Wizard101.app -name "propsys.dll" 2>/dev/null | head -1) || true
-    fi
-
-    # 5. Önceden derlenmiş stub
-    if [[ -z "$propsys_src" && -f "$cached_stub" ]]; then
-        propsys_src="$cached_stub"
-        echo "[run] Önceden derlenmiş propsys.dll stub kullanılıyor."
-    fi
-
-    if [[ -n "$propsys_src" ]]; then
-        echo "[run] propsys.dll → $sys32/propsys.dll"
-        cp "$propsys_src" "$sys32/propsys.dll" 2>/dev/null || true
-    else
-        # 6. Stub derle
-        echo "[run] propsys.dll bulunamadı — mingw-w64 ile stub derleniyor..."
+    if [[ ! -f "$cached_stub" ]]; then
+        echo "[run] propsys.dll stub derleniyor (mingw-w64)..."
         mkdir -p "$HOME/.w101d_cache"
-        if _build_propsys_stub "$HOME/.w101d_cache"; then
-            cp "$HOME/.w101d_cache/propsys_stub_v2.dll" "$sys32/propsys.dll" 2>/dev/null || true
-        else
+        if ! _build_propsys_stub "$HOME/.w101d_cache"; then
             echo "[run] UYARI: propsys.dll stub derlenemedi — Python crash devam edecek." >&2
             return
         fi
+    else
+        echo "[run] Önceden derlenmiş propsys.dll stub kullanılıyor (v2)."
     fi
 
+    echo "[run] propsys.dll → $sys32/propsys.dll"
+    cp "$cached_stub" "$sys32/propsys.dll"
     export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:+${WINEDLLOVERRIDES};}propsys=n,b"
     echo "[run] WINEDLLOVERRIDES: $WINEDLLOVERRIDES"
 }
