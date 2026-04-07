@@ -176,15 +176,13 @@ _fix_propsys() {
     # VariantToString'i implemente etmemiş (sadece "unimplemented relay" içeriyor).
     # Bu yüzden sistem propsys.dll'i ASLA kullanmıyoruz — daima kendi stub'ımız.
 
-    if [[ ! -f "$cached_stub" ]]; then
-        echo "[run] propsys.dll stub derleniyor (mingw-w64)..."
-        mkdir -p "$HOME/.w101d_cache"
-        if ! _build_propsys_stub "$HOME/.w101d_cache"; then
-            echo "[run] UYARI: propsys.dll stub derlenemedi — Python crash devam edecek." >&2
-            return
-        fi
-    else
-        echo "[run] Önceden derlenmiş propsys.dll stub kullanılıyor (v2)."
+    # Eski stub'ı her zaman sil (Wine builtin'den bozuk kopyalanmış olabilir)
+    rm -f "$cached_stub"
+    echo "[run] propsys.dll stub derleniyor (mingw-w64)..."
+    mkdir -p "$HOME/.w101d_cache"
+    if ! _build_propsys_stub "$HOME/.w101d_cache"; then
+        echo "[run] UYARI: propsys.dll stub derlenemedi — Python crash devam edecek." >&2
+        return
     fi
 
     echo "[run] propsys.dll → $sys32/propsys.dll"
