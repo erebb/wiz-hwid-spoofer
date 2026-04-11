@@ -22,24 +22,71 @@ if [[ ! -d "$OUR_PYTHON" ]]; then
     exit 1
 fi
 
-# ── Çalışan Wizard101'den WINEPREFIX oku ─────────────────────────────────────
-_get_wiz_prefix() {
+# ── Çalışan Wizard101'den WINEPREFIX + WINELOADER oku ────────────────────────
+_get_wiz_env() {
     local pid
     pid=$(pgrep -f "WizardGraphicalClient.exe" 2>/dev/null | head -1)
-    [[ -z "$pid" ]] && echo "" && return
+    [[ -z "$pid" ]] && return
     ps eww -p "$pid" 2>/dev/null | python3 -c "
 import sys, re
 txt = sys.stdin.read()
-m = re.search(r'WINEPREFIX=(.*?)(?:\s+[A-Z_][A-Z0-9_]*=|\s*\Z)', txt, re.DOTALL)
-if m: print(m.group(1).strip())
+for key in ('WINEPREFIX', 'WINELOADER'):
+    m = re.search(rf'{key}=(.*?)(?:\s+[A-Z_][A-Z0-9_]*=|\s*\Z)', txt, re.DOTALL)
+    if m: print(f'{key}={m.group(1).strip()}')
 " 2>/dev/null
+}
+
+# ── Wizard101'in Wine'ı gömülü mü? ───────────────────────────────────────────
+_is_bundled_wine() {
+    local l="${1:-}"
+    [[ "$l" == *"Wizard101.app"* || "$l" == *"wizard101.app"* ]]
+}
+
+# ── HEDEF preloader'ı imzala (Wizard101'in çalıştığı Wine) ───────────────────
+_sign_target_preloader() {
+    local wineloader="${1:-}"
+    [[ -z "$wineloader" || ! -x "$wineloader" ]] && return
+    local real
+    real=$(python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" \
+           "$wineloader" 2>/dev/null || echo "$wineloader")
+    local ent
+    ent=$(mktemp /tmp/wine-ent-XXXXXX.plist)
+    cat > "$ent" << 'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.get-task-allow</key>
+    <true/>
+</dict>
+</plist>
+PLIST
+    local signed=0
+    for d in "$(dirname "$real")" "$(dirname "$wineloader")"; do
+        for b in "$d/wine64-preloader" "$d/wine-preloader"; do
+            [[ -x "$b" ]] || continue
+            xattr -d com.apple.quarantine "$b" 2>/dev/null || true
+            if codesign --entitlements "$ent" --force -s - "$b" 2>/dev/null; then
+                echo "[speedhack] Hedef imzalandı (get-task-allow): $(basename "$b")"
+                signed=1
+            fi
+        done
+    done
+    rm -f "$ent"
+    [[ "$signed" -eq 0 ]] && echo "[speedhack] UYARI: Preloader imzalanamadı → memory erişimi başarısız olabilir."
 }
 
 echo "[speedhack] Wizard101 aranıyor..."
 
 WIZ_PREFIX=""
+WIZ_LOADER=""
 for i in $(seq 1 12); do
-    WIZ_PREFIX=$(_get_wiz_prefix)
+    env_info=$(_get_wiz_env)
+    while IFS= read -r line; do
+        [[ "$line" == WINEPREFIX=* ]] && WIZ_PREFIX="${line#WINEPREFIX=}"
+        [[ "$line" == WINELOADER=* ]] && WIZ_LOADER="${line#WINELOADER=}"
+    done <<< "$env_info"
     if [[ -n "$WIZ_PREFIX" ]]; then
         echo "[speedhack] Wizard101 bulundu."
         break
@@ -51,6 +98,19 @@ done
 if [[ -z "$WIZ_PREFIX" ]]; then
     echo "[speedhack] HATA: Wizard101 çalışmıyor." >&2
     exit 1
+fi
+
+# Oyunun preloader'ını imzala
+_sign_target_preloader "$WIZ_LOADER"
+
+# ── Python için Wine seç ──────────────────────────────────────────────────────
+if [[ -n "$WIZ_LOADER" && -x "$WIZ_LOADER" ]] && ! _is_bundled_wine "$WIZ_LOADER"; then
+    WINE_BIN="$WIZ_LOADER"
+    echo "[speedhack] Oyunun Wine'ı kullanılıyor : $WINE_BIN"
+else
+    if _is_bundled_wine "${WIZ_LOADER:-}"; then
+        echo "[speedhack] Homebrew Wine kullanılıyor (gömülü Wine Python için uyumsuz)"
+    fi
 fi
 
 # ── Python'u Wizard101 prefix'ine kopyala (henüz yoksa) ──────────────────────

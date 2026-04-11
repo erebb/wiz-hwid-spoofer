@@ -25,8 +25,16 @@ for key in ('WINEPREFIX', 'WINELOADER'):
 " 2>/dev/null
 }
 
-_sign_wine_preloader() {
-    local wineloader="$1"
+# ── Wizard101'in Wine'ı gömülü mü? (bundled Wine Python'u crash eder) ────────
+_is_bundled_wine() {
+    local l="${1:-}"
+    [[ "$l" == *"Wizard101.app"* || "$l" == *"wizard101.app"* ]]
+}
+
+# ── HEDEF preloader'ı imzala (Wizard101'in çalıştığı Wine) ───────────────────
+# macOS güvenlik kuralı: okunan (hedef) program imzalı olmalı, okuyan değil.
+_sign_target_preloader() {
+    local wineloader="${1:-}"
     [[ -z "$wineloader" || ! -x "$wineloader" ]] && return
     local real
     real=$(python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" \
@@ -44,15 +52,23 @@ _sign_wine_preloader() {
 </dict>
 </plist>
 PLIST
+    local signed=0
     for d in "$(dirname "$real")" "$(dirname "$wineloader")"; do
         for b in "$d/wine64-preloader" "$d/wine-preloader"; do
             [[ -x "$b" ]] || continue
             xattr -d com.apple.quarantine "$b" 2>/dev/null || true
-            codesign --entitlements "$ent" --force -s - "$b" 2>/dev/null \
-                && echo "[tools] İmzalandı: $(basename "$b")" || true
+            if codesign --entitlements "$ent" --force -s - "$b" 2>/dev/null; then
+                echo "[tools] Hedef imzalandı (get-task-allow): $(basename "$b")"
+                signed=1
+            fi
         done
     done
     rm -f "$ent"
+    if [[ "$signed" -eq 0 ]]; then
+        echo "[tools] UYARI: Preloader imzalanamadı → memory erişimi başarısız olabilir."
+    else
+        echo "[tools] NOT: İmza etkili olması için oyunun bir sonraki AÇILIŞINDA geçerli olur."
+    fi
 }
 
 echo "[tools] Wizard101 aranıyor..."
@@ -74,9 +90,15 @@ if [[ -z "$WIZ_PREFIX" ]]; then
     echo "[tools] HATA: Wizard101 çalışmıyor." >&2; exit 1
 fi
 
-# Oyunun Wine binary'sini kullan
-if [[ -n "$WIZ_LOADER" && -x "$WIZ_LOADER" ]]; then
+# Oyunun preloader'ını imzala (hedef = Wizard101'in wine64-preloader'ı)
+_sign_target_preloader "$WIZ_LOADER"
+
+# ── Python için Wine seç ──────────────────────────────────────────────────────
+# Gömülü Wine (Wizard101.app içi) → Homebrew Wine kullan
+# CrossOver / Whisky / Homebrew   → AYNI Wine'ı kullan → aynı wineserver
+if [[ -n "$WIZ_LOADER" && -x "$WIZ_LOADER" ]] && ! _is_bundled_wine "$WIZ_LOADER"; then
     ACTIVE_WINE="$WIZ_LOADER"
+    echo "[tools] Oyunun Wine'ı kullanılıyor : $ACTIVE_WINE"
 else
     # Fallback: Homebrew Wine
     ACTIVE_WINE=""
@@ -87,9 +109,12 @@ else
     if [[ -z "$ACTIVE_WINE" ]]; then
         echo "[tools] HATA: Wine bulunamadı." >&2; exit 1
     fi
+    if _is_bundled_wine "${WIZ_LOADER:-}"; then
+        echo "[tools] Homebrew Wine kullanılıyor (gömülü Wine Python için uyumsuz)"
+    else
+        echo "[tools] Homebrew Wine kullanılıyor : $ACTIVE_WINE"
+    fi
 fi
-
-_sign_wine_preloader "$ACTIVE_WINE"
 
 WIN_PYTHON="$WIZ_PREFIX/drive_c/Python313/python.exe"
 WIN_TOOLS="$WIZ_PREFIX/drive_c/wiz_tools.py"
