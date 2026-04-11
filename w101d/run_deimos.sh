@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
 # run_deimos.sh — Wizard101 araçlarını çalıştırır.
 #
-# Mac/Wine memory erişim mimarisi:
-#   - Oyun (WizardGraphicalClient.exe) kendi Wine'ında çalışır
-#   - Python/Deimos Homebrew Wine ile çalışır (bundled Wine Python'u crash eder)
-#   - Bellek erişimi: oyunun wine64-preloader'ını get-task-allow ile imzalarız
-#     → macOS task_for_pid izin verir → pymem cross-process okuyabilir
-#   - CrossOver/Whisky kullanıcıları: WINELOADER alınır, Python ile aynı
-#     Wine kullanılır (aynı wineserver = memory erişimi daha güvenilir)
+# Yaklaşım: process env okumak yerine dosya sisteminden Wine prefix'i bulur.
+# Bundled Wine (Wizard101.app) child env'a WINEPREFIX koymadığından
+# process tespiti yerine kurulum dizini taraması kullanılır.
 #
 # KULLANIM:
 #   bash run_deimos.sh              → Deimos
@@ -32,48 +28,51 @@ if [[ "$MODE" == "deimos" && ! -f "$DEIMOS_DIR/Deimos.py" ]]; then
     echo "[run] HATA: Deimos bulunamadı." >&2; exit 1
 fi
 
-# ── Çalışan Wizard101'den WINEPREFIX + WINELOADER oku ────────────────────────
-# ps auxww: pgrep'ten farklı olarak çok uzun komut satırlarını da yakalar
-_get_wiz_env() {
-    local pid
-    pid=$(ps auxww | grep -i "WizardGraphicalClient.exe" | grep -v grep \
-          | awk '{print $2}' | head -1)
-    [[ -z "$pid" ]] && return
-    # Python regex: boşluklu yolları (Application Support vb.) doğru okur
-    ps eww -p "$pid" 2>/dev/null | python3 -c "
-import sys, re
-txt = sys.stdin.read()
-for key in ('WINEPREFIX', 'WINELOADER'):
-    m = re.search(rf'{key}=(.*?)(?:\s+[A-Z_][A-Z0-9_]*=|\s*\Z)', txt, re.DOTALL)
-    if m: print(f'{key}={m.group(1).strip()}')
-" 2>/dev/null
+# ── Wizard101 exe'sini dosya sisteminden bul → prefix türet ──────────────────
+_find_wiz_exe() {
+    local candidates=(
+        "$HOME/Library/Application Support/Wizard101/Bottles/wizard101/drive_c/ProgramData/KingsIsle Entertainment/Wizard101/Bin/WizardGraphicalClient.exe"
+        "$HOME/Library/Application Support/Wizard101/Bottles/wizard101/drive_c/Program Files/Wizard101/Bin/WizardGraphicalClient.exe"
+        "$HOME/Library/Application Support/Wizard101/Bottles/wizard101/drive_c/Program Files (x86)/Wizard101/Bin/WizardGraphicalClient.exe"
+        "$HOME/Library/Application Support/Wizard101/drive_c/ProgramData/KingsIsle Entertainment/Wizard101/Bin/WizardGraphicalClient.exe"
+        "$HOME/Library/Application Support/Wizard101/drive_c/Program Files/Wizard101/Bin/WizardGraphicalClient.exe"
+        "$HOME/Library/Application Support/Wizard101/drive_c/Program Files (x86)/Wizard101/Bin/WizardGraphicalClient.exe"
+    )
+    for c in "${candidates[@]}"; do
+        [[ -f "$c" ]] && echo "$c" && return
+    done
+    # Geniş arama: Library + Wizard101.app içi
+    find "$HOME/Library" /Applications/Wizard101.app \
+         -name "WizardGraphicalClient.exe" -maxdepth 12 2>/dev/null | head -1
 }
 
-# Bundled Wine (Wizard101.app) WINELOADER set etmeyebilir → ps'ten wine64-preloader yolunu çek
-_find_bundled_preloader() {
-    ps auxww 2>/dev/null \
-        | grep -i "wine64-preloader" | grep -iv grep \
-        | grep -i "Wizard101" \
-        | awk '{print $11}' | head -1
+# ── Wizard101'in bundled Wine binary'sini bul ─────────────────────────────────
+_find_bundled_wine() {
+    # Önce bilinen sabit konumlar
+    for b in \
+        "/Applications/Wizard101.app/Contents/SharedSupport/wine/bin/wine64" \
+        "/Applications/Wizard101.app/Contents/SharedSupport/wine/bin/wine" \
+        "/Applications/Wizard101.app/Contents/Resources/wine/bin/wine64" \
+        "/Applications/Wizard101.app/Contents/Resources/wine/bin/wine" \
+        "/Applications/Wizard101.app/Contents/MacOS/wine64" \
+        "/Applications/Wizard101.app/Contents/MacOS/wine"; do
+        [[ -x "$b" ]] && echo "$b" && return
+    done
+    # Geniş arama
+    find /Applications/Wizard101.app -name "wine64" -maxdepth 8 2>/dev/null \
+        | grep "/bin/" | head -1
 }
 
-# ── Wizard101'in Wine'ı gömülü mü? (bundled Wine Python'u crash eder) ────────
-_is_bundled_wine() {
-    local l="${1:-}"
-    # Wizard101'in kendi app bundle'ı içindeki wine = gömülü/stripped Wine
-    [[ "$l" == *"Wizard101.app"* || "$l" == *"wizard101.app"* ]]
-}
-
-# ── HEDEF preloader'ı imzala (Wizard101'in çalıştığı Wine) ───────────────────
-# macOS güvenlik kuralı: okunan (hedef) program imzalı olmalı, okuyan değil.
-# Bu yüzden oyunun Wine preloader'ını imzalıyoruz, Homebrew'un değil.
-_sign_target_preloader() {
-    local wineloader="${1:-}"
-    [[ -z "$wineloader" || ! -x "$wineloader" ]] && return
-    local real
+# ── Preloader imzala (get-task-allow) ─────────────────────────────────────────
+_sign_preloader() {
+    local wine_bin="${1:-}"
+    [[ -z "$wine_bin" || ! -x "$wine_bin" ]] && return
+    local real bin_dir
     real=$(python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" \
-           "$wineloader" 2>/dev/null || echo "$wineloader")
-    local ent
+           "$wine_bin" 2>/dev/null || echo "$wine_bin")
+    bin_dir=$(dirname "$real")
+
+    local ent signed=0
     ent=$(mktemp /tmp/wine-ent-XXXXXX.plist)
     cat > "$ent" << 'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -86,13 +85,12 @@ _sign_target_preloader() {
 </dict>
 </plist>
 PLIST
-    local signed=0
-    for d in "$(dirname "$real")" "$(dirname "$wineloader")"; do
+    for d in "$bin_dir" "$(dirname "$wine_bin")"; do
         for b in "$d/wine64-preloader" "$d/wine-preloader"; do
             [[ -x "$b" ]] || continue
             xattr -d com.apple.quarantine "$b" 2>/dev/null || true
             if codesign --entitlements "$ent" --force -s - "$b" 2>/dev/null; then
-                echo "[run] Hedef imzalandı (get-task-allow): $(basename "$b")"
+                echo "[run] İmzalandı (get-task-allow): $(basename "$b") ← $b"
                 signed=1
             fi
         done
@@ -100,58 +98,94 @@ PLIST
     rm -f "$ent"
     if [[ "$signed" -eq 0 ]]; then
         echo "[run] UYARI: Preloader imzalanamadı → memory erişimi başarısız olabilir."
-        echo "[run]        Oyunu kapatıp setup_env.sh'ı tekrar çalıştır, sonra oyunu aç."
     else
-        echo "[run] NOT: İmza etkili olması için oyunun bir sonraki AÇILIŞINDA geçerli olur."
+        echo "[run] NOT: İmza yeni açılışta geçerli olur → oyunu kapat/aç."
     fi
 }
 
-# ── Wizard101'i bul ───────────────────────────────────────────────────────────
-echo "[run] Wizard101 aranıyor..."
-WIZ_PREFIX=""
-WIZ_LOADER=""
+# ── Wizard101 process'i çalışıyor mu? ─────────────────────────────────────────
+_wiz_is_running() {
+    ps auxww 2>/dev/null \
+        | grep -iE "(WizardGraphicalClient|KingsIsle)" \
+        | grep -v "grep\|run_deimos\|bash\|python" \
+        | grep -q . 2>/dev/null
+}
 
-for i in $(seq 1 12); do
-    env_info=$(_get_wiz_env)
-    while IFS= read -r line; do
-        [[ "$line" == WINEPREFIX=* ]] && WIZ_PREFIX="${line#WINEPREFIX=}"
-        [[ "$line" == WINELOADER=* ]] && WIZ_LOADER="${line#WINELOADER=}"
-    done <<< "$env_info"
-    if [[ -n "$WIZ_PREFIX" ]]; then echo "[run] Wizard101 bulundu."; break; fi
-    echo "[run] Bekleniyor... ($i/12) — Wizard101'i aç"
-    sleep 5
-done
+# ─────────────────────────────────────────────────────────────────────────────
+# 1. Dosya sisteminden Wizard101 kurulumunu bul
+# ─────────────────────────────────────────────────────────────────────────────
+echo "[run] Wizard101 kurulumu aranıyor..."
+WIZ_EXE=$(_find_wiz_exe)
 
-[[ -z "$WIZ_PREFIX" ]] && { echo "[run] HATA: Wizard101 çalışmıyor." >&2; exit 1; }
-
-# Bundled Wine WINELOADER set etmeyebilir → ps'ten wine64-preloader yolunu bul
-if [[ -z "$WIZ_LOADER" ]]; then
-    WIZ_LOADER=$(_find_bundled_preloader)
-    [[ -n "$WIZ_LOADER" ]] && echo "[run] Preloader ps'ten bulundu: $WIZ_LOADER"
+if [[ -z "$WIZ_EXE" ]]; then
+    echo "[run] WizardGraphicalClient.exe otomatik bulunamadı."
+    echo "[run] Lütfen tam yolunu girin:"
+    read -r WIZ_EXE
 fi
 
-# Oyunun preloader'ını imzala (hedef = Wizard101'in wine64-preloader'ı)
-_sign_target_preloader "$WIZ_LOADER"
+if [[ -z "$WIZ_EXE" || ! -f "$WIZ_EXE" ]]; then
+    echo "[run] HATA: Geçerli exe yolu yok: $WIZ_EXE" >&2; exit 1
+fi
 
-# ── Python için Wine seç ──────────────────────────────────────────────────────
-# Kural:
-#   • Gömülü Wine (Wizard101.app içi) → Homebrew Wine kullan, task_for_pid ile eri
-#   • CrossOver / Whisky / Homebrew   → AYNI Wine'ı kullan → aynı wineserver → daha güvenilir
-if [[ -n "$WIZ_LOADER" && -x "$WIZ_LOADER" ]] && ! _is_bundled_wine "$WIZ_LOADER"; then
-    ACTIVE_WINE="$WIZ_LOADER"
-    echo "[run] Oyunun Wine'ı kullanılıyor : $ACTIVE_WINE"
-    echo "[run] (Aynı wineserver → memory erişimi garantili)"
+WIZ_PREFIX=$(echo "$WIZ_EXE" | sed 's|/drive_c/.*||')
+echo "[run] Wizard101 prefix: $WIZ_PREFIX"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 2. Bundled Wine'ı bul ve preloader'ı imzala
+# ─────────────────────────────────────────────────────────────────────────────
+BUNDLED_WINE=$(_find_bundled_wine)
+
+if [[ -n "$BUNDLED_WINE" ]]; then
+    echo "[run] Bundled Wine: $BUNDLED_WINE"
+    _sign_preloader "$BUNDLED_WINE"
+else
+    echo "[run] Bundled Wine bulunamadı → Homebrew Wine preloader imzalanıyor"
+    _sign_preloader "$WINE_BIN"
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 3. Oyunun çalışmasını bekle / aç
+# ─────────────────────────────────────────────────────────────────────────────
+if ! _wiz_is_running; then
+    echo "[run] Wizard101 çalışmıyor."
+    if [[ -d "/Applications/Wizard101.app" ]]; then
+        echo "[run] Wizard101 açılıyor..."
+        open -a Wizard101 2>/dev/null || open /Applications/Wizard101.app 2>/dev/null || true
+    else
+        echo "[run] Lütfen Wizard101'i manuel olarak açın."
+    fi
+    echo "[run] Oyunun yüklenmesi bekleniyor..."
+    for i in $(seq 1 36); do
+        sleep 5
+        if _wiz_is_running; then
+            echo "[run] Wizard101 başladı!"
+            sleep 3   # Yüklenmesi için kısa bekleme
+            break
+        fi
+        echo "[run] Bekleniyor... ($i/36)"
+        if [[ "$i" -eq 36 ]]; then
+            echo "[run] HATA: Wizard101 başlamadı." >&2; exit 1
+        fi
+    done
+fi
+
+echo "[run] Wizard101 çalışıyor."
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4. Python için Wine seç
+#    Bundled Wine (Wizard101.app) Python'u crash eder → Homebrew Wine kullan
+# ─────────────────────────────────────────────────────────────────────────────
+if [[ -n "$BUNDLED_WINE" ]]; then
+    ACTIVE_WINE="$WINE_BIN"
+    echo "[run] Python Wine: Homebrew ($WINE_BIN) — bundled Wine Python'u desteklemiyor"
 else
     ACTIVE_WINE="$WINE_BIN"
-    if _is_bundled_wine "${WIZ_LOADER:-}"; then
-        echo "[run] Homebrew Wine kullanılıyor (gömülü Wine Python için uyumsuz)"
-        echo "[run] → Memory erişimi task_for_pid ile sağlanıyor (imzalama gerekli)"
-    else
-        echo "[run] Homebrew Wine kullanılıyor : $ACTIVE_WINE"
-    fi
+    echo "[run] Python Wine: $WINE_BIN"
 fi
 
-# ── Python'u oyunun prefix'ine kopyala (yoksa) ───────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# 5. Python'u oyunun prefix'ine kopyala (yoksa)
+# ─────────────────────────────────────────────────────────────────────────────
 WIN_PYTHON="$WIZ_PREFIX/drive_c/Python313/python.exe"
 if [[ ! -f "$WIN_PYTHON" ]]; then
     echo "[run] Python kopyalanıyor → $WIZ_PREFIX/drive_c/Python313"
@@ -163,6 +197,7 @@ fi
 
 export WINEPREFIX="$WIZ_PREFIX"
 echo "[run] WINEPREFIX : $WIZ_PREFIX"
+echo "[run] Wine       : $ACTIVE_WINE"
 echo "[run] Mod        : $MODE"
 echo ""
 
