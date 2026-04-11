@@ -42,11 +42,12 @@ _get_wiz_prefix() {
     local pid
     pid=$(pgrep -f "WizardGraphicalClient.exe" 2>/dev/null | head -1)
     [[ -z "$pid" ]] && echo "" && return
-    ps eww -p "$pid" 2>/dev/null \
-        | tr ' ' '\n' \
-        | grep '^WINEPREFIX=' \
-        | head -1 \
-        | cut -d= -f2-
+    ps eww -p "$pid" 2>/dev/null | python3 -c "
+import sys, re
+txt = sys.stdin.read()
+m = re.search(r'WINEPREFIX=(.*?)(?:\s+[A-Z_][A-Z0-9_]*=|\s*\Z)', txt, re.DOTALL)
+if m: print(m.group(1).strip())
+" 2>/dev/null
 }
 
 echo "[tools] Wizard101 aranıyor..."
