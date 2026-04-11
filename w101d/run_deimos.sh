@@ -33,9 +33,11 @@ if [[ "$MODE" == "deimos" && ! -f "$DEIMOS_DIR/Deimos.py" ]]; then
 fi
 
 # ── Çalışan Wizard101'den WINEPREFIX + WINELOADER oku ────────────────────────
+# ps auxww: pgrep'ten farklı olarak çok uzun komut satırlarını da yakalar
 _get_wiz_env() {
     local pid
-    pid=$(pgrep -f "WizardGraphicalClient.exe" 2>/dev/null | head -1)
+    pid=$(ps auxww | grep -i "WizardGraphicalClient.exe" | grep -v grep \
+          | awk '{print $2}' | head -1)
     [[ -z "$pid" ]] && return
     # Python regex: boşluklu yolları (Application Support vb.) doğru okur
     ps eww -p "$pid" 2>/dev/null | python3 -c "
@@ -45,6 +47,14 @@ for key in ('WINEPREFIX', 'WINELOADER'):
     m = re.search(rf'{key}=(.*?)(?:\s+[A-Z_][A-Z0-9_]*=|\s*\Z)', txt, re.DOTALL)
     if m: print(f'{key}={m.group(1).strip()}')
 " 2>/dev/null
+}
+
+# Bundled Wine (Wizard101.app) WINELOADER set etmeyebilir → ps'ten wine64-preloader yolunu çek
+_find_bundled_preloader() {
+    ps auxww 2>/dev/null \
+        | grep -i "wine64-preloader" | grep -iv grep \
+        | grep -i "Wizard101" \
+        | awk '{print $11}' | head -1
 }
 
 # ── Wizard101'in Wine'ı gömülü mü? (bundled Wine Python'u crash eder) ────────
@@ -113,6 +123,12 @@ for i in $(seq 1 12); do
 done
 
 [[ -z "$WIZ_PREFIX" ]] && { echo "[run] HATA: Wizard101 çalışmıyor." >&2; exit 1; }
+
+# Bundled Wine WINELOADER set etmeyebilir → ps'ten wine64-preloader yolunu bul
+if [[ -z "$WIZ_LOADER" ]]; then
+    WIZ_LOADER=$(_find_bundled_preloader)
+    [[ -n "$WIZ_LOADER" ]] && echo "[run] Preloader ps'ten bulundu: $WIZ_LOADER"
+fi
 
 # Oyunun preloader'ını imzala (hedef = Wizard101'in wine64-preloader'ı)
 _sign_target_preloader "$WIZ_LOADER"
