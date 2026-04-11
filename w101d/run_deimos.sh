@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
-# run_deimos.sh — Wizard101 + Deimos'u AYNI Wine prefix'inde başlatır.
-# Aynı wineserver = WizWalker Wizard101'in memory'sini görebilir.
-# Her ikisi de Homebrew wine-stable ile çalışır.
+# run_deimos.sh — Çalışan Wizard101'in Wine prefix'ini tespit eder ve
+#                 Deimos'u AYNI prefix'te başlatır.
+#
+# KULLANIM:
+#   1. Wizard101'i Wine ile KENDIN aç (script bunu YAPMAZ)
+#   2. Oyun yüklendikten sonra bu scripti çalıştır
+#   3. Script çalışan prosesten WINEPREFIX'i okur ve Deimos'u bağlar
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -20,61 +24,55 @@ if [[ ! -f "$DEIMOS_DIR/Deimos.py" ]]; then
     exit 1
 fi
 
-# ── WizardGraphicalClient.exe'yi bul ─────────
-_find_wiz_exe() {
-    local candidates=(
-        "$HOME/Library/Application Support/Wizard101/Bottles/wizard101/drive_c/ProgramData/KingsIsle Entertainment/Wizard101/Bin/WizardGraphicalClient.exe"
-        "$HOME/Library/Application Support/Wizard101/Bottles/wizard101/drive_c/Program Files/Wizard101/Bin/WizardGraphicalClient.exe"
-        "$HOME/Library/Application Support/Wizard101/Bottles/wizard101/drive_c/Program Files (x86)/Wizard101/Bin/WizardGraphicalClient.exe"
-        "$HOME/Library/Application Support/Wizard101/drive_c/ProgramData/KingsIsle Entertainment/Wizard101/Bin/WizardGraphicalClient.exe"
-        "$HOME/Library/Application Support/Wizard101/drive_c/Program Files/Wizard101/Bin/WizardGraphicalClient.exe"
-        "$HOME/Library/Application Support/Wizard101/drive_c/Program Files (x86)/Wizard101/Bin/WizardGraphicalClient.exe"
-    )
-    for c in "${candidates[@]}"; do
-        [[ -f "$c" ]] && echo "$c" && return
-    done
-    find "$HOME/Library" -name "WizardGraphicalClient.exe" 2>/dev/null | head -1
+# ── Çalışan Wizard101'den WINEPREFIX oku ─────
+# macOS'ta çalışan proseslerin ortam değişkenlerini ps ile okuyabiliriz.
+_get_wiz_prefix() {
+    local pid
+    pid=$(pgrep -f "WizardGraphicalClient.exe" 2>/dev/null | head -1)
+    if [[ -z "$pid" ]]; then
+        echo ""
+        return
+    fi
+    # ps eww ile ortam değişkenlerini al, WINEPREFIX'i çıkar
+    ps eww -p "$pid" 2>/dev/null \
+        | tr ' ' '\n' \
+        | grep '^WINEPREFIX=' \
+        | head -1 \
+        | cut -d= -f2-
 }
 
-WIZ_EXE=$(_find_wiz_exe)
+echo "[run] Wizard101 aranıyor (çalışan proses)..."
 
-if [[ -z "$WIZ_EXE" ]]; then
-    echo "[run] WizardGraphicalClient.exe bulunamadı."
-    echo "[run] Lütfen tam yolunu girin:"
-    read -r WIZ_EXE
-    if [[ ! -f "$WIZ_EXE" ]]; then
-        echo "[run] HATA: Dosya bulunamadı: $WIZ_EXE" >&2
-        exit 1
+WIZ_PREFIX=""
+for i in $(seq 1 12); do
+    WIZ_PREFIX=$(_get_wiz_prefix)
+    if [[ -n "$WIZ_PREFIX" ]]; then
+        echo "[run] Wizard101 bulundu (WINEPREFIX: $WIZ_PREFIX)"
+        break
     fi
+    echo "[run] Bekleniyor... ($i/12) — Wizard101'i Wine ile açtığından emin ol"
+    sleep 5
+done
+
+if [[ -z "$WIZ_PREFIX" ]]; then
+    echo "[run] HATA: Wizard101 çalışmıyor. Wine ile önce oyunu aç." >&2
+    exit 1
 fi
 
-echo "[run] Wizard101 bulundu: $WIZ_EXE"
-
-# Wizard101'in Wine prefix'ini exe yolundan tespit et
-# Örnek: /Users/x/.wine/drive_c/... → /Users/x/.wine
-WIZ_PREFIX=$(echo "$WIZ_EXE" | sed 's|/drive_c/.*||')
-echo "[run] Ortak Wine prefix : $WIZ_PREFIX"
-echo "[run] Wine binary       : $WINE_BIN"
-
-# Python'u bu prefix'e kopyala (henüz yoksa)
+# ── Python'u Wizard101 prefix'ine kopyala (henüz yoksa) ──
 WIN_PYTHON="$WIZ_PREFIX/drive_c/Python313/python.exe"
 if [[ ! -f "$WIN_PYTHON" ]]; then
     echo "[run] Python kopyalanıyor → $WIZ_PREFIX/drive_c/Python313"
     cp -r "$OUR_PYTHON" "$WIZ_PREFIX/drive_c/Python313"
 fi
 
-# Her iki uygulama AYNI WINEPREFIX → aynı wineserver → memory erişimi OK
+echo "[run] Wine binary : $WINE_BIN"
+echo "[run] WINEPREFIX  : $WIZ_PREFIX"
+
+# Aynı prefix → aynı wineserver → Deimos Wizard101'in memory'sine erişebilir
 export WINEPREFIX="$WIZ_PREFIX"
 
-# ── Wizard101'i başlat ───────────────────────
-# -L login.us.wizard101.com 12000 → launcher bypass, direkt login
-echo "[run] Wizard101 başlatılıyor..."
-"$WINE_BIN" "$WIZ_EXE" -L login.us.wizard101.com 12000 &
-
-echo "[run] Wizard101 yükleniyor, bekleniyor (20 saniye)..."
-sleep 20
-
-# ── Deimos'u aynı prefix'te başlat ──────────
+# ── Deimos'u başlat ──────────────────────────
 echo "[run] Deimos başlatılıyor..."
 cd "$DEIMOS_DIR"
 "$WINE_BIN" "$WIN_PYTHON" Deimos.py
