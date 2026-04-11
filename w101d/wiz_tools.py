@@ -2,127 +2,95 @@
 """
 wiz_tools.py — Wizard101 Mac/Wine araç seti
 ============================================
+Deimos/wizwalker kodu baz alınarak Mac/Wine için uyarlandı.
+
 Özellikler:
-  [1] Speedhack  — oyuncu hareket hızını çarpanla artırır
-  [2] Quest TP   — aktif quest hedefine ışınlanır (Enter ile)
-  [3] Her ikisi  — aynı anda çalışır
+  speed  — client_object.speed_multiplier üzerinden hız çarpanı
+             (Deimos'un kullandığı aynı yöntem, int16: değer = (çarpan-1)*100)
+  quest  — client.quest_position.position() → client.teleport() ile quest TP
+  both   — ikisi aynı anda
 
-Nasıl çalışır (Mac/Wine):
-  - setup_single.sh ile wine64-preloader get-task-allow ile imzalanır
-  - Bu sayede pymem, Wizard101 prosesinin memory'sini okuyabilir (sudo yok)
-  - wizwalker Wine içinde çalışarak aynı wineserver üzerinden bağlanır
+Mac/Wine notu:
+  setup_single.sh veya setup_env.sh wine64-preloader'ı get-task-allow ile
+  imzalar; bu sayede pymem cross-process memory okuyabilir, sudo gerekmez.
 
-Kullanım (run_tools.sh üzerinden):
-  bash run_tools.sh          →  menü
-  bash run_tools.sh speed 3  →  doğrudan 3x speedhack
-  bash run_tools.sh quest    →  doğrudan quest TP
-  bash run_tools.sh both 3   →  3x speed + quest TP
+Kullanım (run_deimos.sh veya run_tools.sh üzerinden çalıştır):
+  bash run_deimos.sh speed 3   → 3x speedhack
+  bash run_deimos.sh quest     → Enter ile quest TP
+  bash run_deimos.sh both 3    → ikisi birden
 """
 import asyncio
 import sys
 
-DEFAULT_SPEED = 580.0   # Wizard101 varsayılan yürüyüş hızı (float)
-POLL_INTERVAL = 0.05    # saniye — speedhack yazma aralığı
+POLL_SEC = 0.1   # speedhack yazma aralığı (alan geçişlerinde değer sıfırlanır)
 
 
-# ── Yardımcı: sadece bir kez TP ─────────────────────────────────────────────
-async def _tp_to_quest(client) -> str:
-    """Quest hedefine ışınlan, konum stringini döndür."""
-    pos = await client.quest_position.position()
-    await client.teleport(pos)
-    return f"x={pos.x:.1f}  y={pos.y:.1f}  z={pos.z:.1f}"
+# ── Speedhack ────────────────────────────────────────────────────────────────
+async def speedhack_loop(client, multiplier: float, stop: asyncio.Event):
+    """
+    Deimos tarzı hız hilesi.
+    client_object.speed_multiplier → int16
+    Formül: değer = (çarpan - 1) * 100   örn: 3x → 200, 5x → 400
+    Sıfırlama: 0 yaz (= normal hız)
+    """
+    target = int((multiplier - 1) * 100)
+    original = 0
 
+    print(f"[speed] Aktif  →  {multiplier}x  (multiplier değeri: {target})")
+    print(f"[speed] Ctrl+C ile dur")
 
-# ── Speedhack döngüsü ────────────────────────────────────────────────────────
-async def speedhack_loop(client, multiplier: float, stop_event: asyncio.Event):
-    target = DEFAULT_SPEED * multiplier
-    print(f"[speed] Aktif → {target:.0f}  ({multiplier}x)  |  Ctrl+C ile dur")
     try:
-        while not stop_event.is_set():
-            try:
-                body = await client.body()
-                if body is not None:
-                    await body.write_move_speed(target)
-            except Exception:
-                pass   # alan geçişi / karakter yüklenmesi sırasında beklenen hata
-            await asyncio.sleep(POLL_INTERVAL)
-    finally:
-        # Durdurulunca orijinal hızı geri yaz
         try:
-            body = await client.body()
-            if body is not None:
-                await body.write_move_speed(DEFAULT_SPEED)
-            print(f"[speed] Hız sıfırlandı → {DEFAULT_SPEED:.0f}")
+            original = await client.client_object.speed_multiplier()
+        except Exception:
+            original = 0
+
+        while not stop.is_set():
+            try:
+                await client.client_object.write_speed_multiplier(target)
+            except Exception:
+                pass   # alan geçişinde beklenen hata
+            await asyncio.sleep(POLL_SEC)
+
+    finally:
+        try:
+            await client.client_object.write_speed_multiplier(original)
+            print(f"[speed] Hız sıfırlandı (multiplier={original})")
         except Exception:
             pass
 
 
-# ── Quest TP döngüsü ─────────────────────────────────────────────────────────
-async def quest_tp_loop(client, stop_event: asyncio.Event):
+# ── Quest TP ─────────────────────────────────────────────────────────────────
+async def quest_tp_loop(client, stop: asyncio.Event):
+    """
+    wizwalker quest TP:
+      client.quest_position.position() → XYZ
+      client.teleport(xyz)
+    Kullanıcı Enter'a basınca bir kez ışınlanır.
+    """
     loop = asyncio.get_event_loop()
-    print("[quest] Aktif  |  Enter → ışınlan  |  Ctrl+C → çık")
+    print("[quest] Aktif  |  Enter → quest hedefine ışınlan  |  Ctrl+C → çık")
+
     try:
-        while not stop_event.is_set():
-            # Blocking input'u thread pool'da çalıştır (asyncio'yu bloklamaz)
+        while not stop.is_set():
             try:
                 await loop.run_in_executor(None, sys.stdin.readline)
             except EOFError:
                 break
-            if stop_event.is_set():
+            if stop.is_set():
                 break
             try:
-                konum = await _tp_to_quest(client)
-                print(f"[quest] Işınlandı → {konum}")
+                xyz = await client.quest_position.position()
+                await client.teleport(xyz)
+                print(f"[quest] Işınlandı  →  x={xyz.x:.1f}  y={xyz.y:.1f}  z={xyz.z:.1f}")
             except Exception as e:
                 print(f"[quest] Hata: {e}")
     finally:
         print("[quest] Durduruldu.")
 
 
-# ── Menü ─────────────────────────────────────────────────────────────────────
-def _menu() -> tuple:
-    """(mod: str, çarpan: float) döndür."""
-    print()
-    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    print("   Wizard101 Mac Tools")
-    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    print("  [1]  Speedhack")
-    print("  [2]  Quest TP")
-    print("  [3]  İkisi birden")
-    print("  [q]  Çık")
-    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
-    while True:
-        sec = input("Seçim: ").strip().lower()
-        if sec == "q":
-            sys.exit(0)
-        if sec in ("1", "2", "3"):
-            break
-        print("  → 1, 2, 3 veya q gir.")
-
-    mod_map = {"1": "speed", "2": "quest", "3": "both"}
-    mod = mod_map[sec]
-
-    mult = DEFAULT_SPEED  # kullanılmaz eğer quest-only ise
-    if mod in ("speed", "both"):
-        while True:
-            raw = input(f"Hız çarpanı (varsayılan 3): ").strip()
-            if raw == "":
-                mult = 3.0
-                break
-            try:
-                mult = float(raw)
-                if mult > 0:
-                    break
-                print("  → 0'dan büyük bir sayı gir.")
-            except ValueError:
-                print("  → Geçerli bir sayı gir (örn: 3 veya 2.5).")
-
-    return mod, mult
-
-
-# ── Ana giriş noktası ────────────────────────────────────────────────────────
-async def _run(mod: str, mult: float):
+# ── Bağlantı + ana döngü ─────────────────────────────────────────────────────
+async def _run(mod: str, multiplier: float):
     from wizwalker import ClientHandler
 
     print("\n[tools] Wizard101'e bağlanılıyor...")
@@ -131,21 +99,20 @@ async def _run(mod: str, mult: float):
         clients = handler.get_new_clients()
         if not clients:
             print("[tools] HATA: Çalışan Wizard101 bulunamadı.")
-            print("        Önce oyunu Wine ile aç, sonra bu scripti çalıştır.")
+            print("        Önce oyunu Wine ile aç, sonra tekrar çalıştır.")
             sys.exit(1)
 
         client = clients[0]
         print(f"[tools] Bağlandı  |  PID: {client.process_id}")
 
         await client.activate_hooks()
-        print("[tools] Hook'lar aktif.\n")
+        print("[tools] Memory hook'ları aktif.\n")
 
         stop = asyncio.Event()
         tasks = []
 
         if mod in ("speed", "both"):
-            tasks.append(asyncio.create_task(speedhack_loop(client, mult, stop)))
-
+            tasks.append(asyncio.create_task(speedhack_loop(client, multiplier, stop)))
         if mod in ("quest", "both"):
             tasks.append(asyncio.create_task(quest_tp_loop(client, stop)))
 
@@ -157,25 +124,57 @@ async def _run(mod: str, mult: float):
             stop.set()
             for t in tasks:
                 t.cancel()
-            # Görevlerin temizlenmesini bekle
             await asyncio.gather(*tasks, return_exceptions=True)
             print("\n[tools] Çıkış yapıldı.")
 
 
-def main():
-    # Komut satırı argümanları varsa menüyü atla
-    if len(sys.argv) >= 2:
-        arg = sys.argv[1].lower()
-        if arg in ("speed", "quest", "both"):
-            mod = arg
+# ── Menü ─────────────────────────────────────────────────────────────────────
+def _menu():
+    print()
+    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    print("   Wizard101 Mac Tools")
+    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    print("  [1]  Speedhack")
+    print("  [2]  Quest TP")
+    print("  [3]  İkisi birden")
+    print("  [q]  Çık")
+    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+    while True:
+        s = input("Seçim: ").strip().lower()
+        if s == "q":
+            sys.exit(0)
+        if s in ("1", "2", "3"):
+            break
+
+    mod = {"1": "speed", "2": "quest", "3": "both"}[s]
+    mult = 3.0
+    if mod in ("speed", "both"):
+        while True:
+            r = input("Hız çarpanı (varsayılan 3): ").strip()
+            if r == "":
+                mult = 3.0
+                break
             try:
-                mult = float(sys.argv[2]) if len(sys.argv) >= 3 else 3.0
+                mult = float(r)
+                if mult > 0:
+                    break
             except ValueError:
-                print(f"[tools] Geçersiz çarpan: {sys.argv[2]}")
-                sys.exit(1)
-        else:
-            print(f"[tools] Bilinmeyen mod: {arg}")
-            print("        Kullanım: wiz_tools.py [speed|quest|both] [çarpan]")
+                pass
+            print("  → Geçerli bir sayı gir.")
+    return mod, mult
+
+
+def main():
+    if len(sys.argv) >= 2:
+        mod = sys.argv[1].lower()
+        if mod not in ("speed", "quest", "both"):
+            print(f"Kullanım: wiz_tools.py [speed|quest|both] [çarpan]")
+            sys.exit(1)
+        try:
+            mult = float(sys.argv[2]) if len(sys.argv) >= 3 else 3.0
+        except ValueError:
+            print(f"Geçersiz çarpan: {sys.argv[2]}")
             sys.exit(1)
     else:
         mod, mult = _menu()

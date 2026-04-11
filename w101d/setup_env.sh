@@ -182,6 +182,8 @@ PLIST
         "/Applications/Wine Stable.app/Contents/Resources/wine/bin/wine64-preloader" \
         "/Applications/Wine Stable.app/Contents/Resources/wine/bin/wine-preloader"; do
         [[ -x "$bin" ]] || continue
+        # Gatekeeper quarantine varsa kaldır (imzalama başarısız olabilir)
+        xattr -d com.apple.quarantine "$bin" 2>/dev/null || true
         if codesign --entitlements "$ent" --force -s - "$bin" 2>/dev/null; then
             echo "[setup] İmzalandı (get-task-allow): $(basename "$bin")"
             ok=1

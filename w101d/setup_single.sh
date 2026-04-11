@@ -211,6 +211,7 @@ for bin in \
     "/Applications/Wine Stable.app/Contents/Resources/wine/bin/wine64-preloader" \
     "/Applications/Wine Stable.app/Contents/Resources/wine/bin/wine-preloader"; do
     [[ -x "$bin" ]] || continue
+    xattr -d com.apple.quarantine "$bin" 2>/dev/null || true
     if codesign --entitlements "$ent" --force -s - "$bin" 2>/dev/null; then
         echo "[setup] İmzalandı: $(basename "$bin")"
         signed=1
