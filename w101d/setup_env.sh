@@ -120,6 +120,45 @@ echo "[setup] wizwalker site-packages'a kopyalanıyor..."
 rm -rf "$SITE_PKG/wizwalker"
 cp -r "$WIZWALKER_DIR/wizwalker" "$SITE_PKG/wizwalker"
 
+# WIZ_PID cross-wineserver patch: ClientHandler.get_new_clients() içine
+# env-var tabanlı bypass ekler. macOS'ta Wine EnumProcesses yalnızca aynı
+# wineserver'ı görür; WIZ_PID ile direkt Client(pid) yaratarak bunu atlatır.
+echo "[setup] wizwalker WIZ_PID cross-wineserver patch uygulanıyor..."
+python3 -c "
+import pathlib
+handler = pathlib.Path('$SITE_PKG/wizwalker/client_handler.py')
+content = handler.read_text()
+PATCH = '''
+# ── WIZ_PID cross-wineserver patch (macOS / Homebrew Wine) ──────────────────
+import os as _os
+
+_orig_get_new_clients = ClientHandler.get_new_clients
+
+def _get_new_clients_patched(self):
+    _pid_str = _os.environ.get(\"WIZ_PID\", \"\").strip()
+    if _pid_str:
+        try:
+            from wizwalker.client import Client
+            _pid = int(_pid_str)
+            if not any(c.process_id == _pid for c in self.clients):
+                _c = Client(_pid)
+                self.clients.append(_c)
+                return [_c]
+            return []
+        except Exception as _e:
+            print(f\"[WIZ_PID] Direkt baglanti basarisiz ({_e}), normal kesif deneniyor...\")
+    return _orig_get_new_clients(self)
+
+ClientHandler.get_new_clients = _get_new_clients_patched
+# ─────────────────────────────────────────────────────────────────────────────
+'''
+if '_get_new_clients_patched' not in content:
+    handler.write_text(content + PATCH)
+    print('[setup] wizwalker WIZ_PID patch OK')
+else:
+    print('[setup] wizwalker WIZ_PID patch zaten mevcut')
+"
+
 # ── wizsprinter: lib-update branch ────────────
 echo "[setup] wizsprinter indiriliyor (lib-update branch)..."
 rm -rf "$WIZSPRINTER_DIR"
@@ -145,6 +184,68 @@ import PySimpleGUI; print('  PySimpleGUI: OK')
 import lark;        print('  lark       : OK')
 "
 
+# ── wine64-preloader'ı imzala (pymem memory erişimi için) ────────────────────
+# macOS, task_for_pid çağrısını bloklar → pymem/wizwalker cross-process memory
+# okuyamaz. wine64-preloader'a "get-task-allow" entitlement'ı ekleyerek
+# diğer Wine proseslerinin bu prosesin memory'sini okumasına izin veriyoruz.
+# sudo gerektirmez, SIP'i kapatmaya gerek yok.
+_sign_wine_for_memory_access() {
+    local wine_bin="$1"
+
+    # Gerçek binary dizinini bul (wine64 bir wrapper script olabilir)
+    local real_wine bin_dir
+    real_wine=$(python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "$wine_bin" 2>/dev/null || echo "$wine_bin")
+    bin_dir=$(dirname "$real_wine")
+
+    # Entitlements plist — geçici dosya
+    local ent
+    ent=$(mktemp /tmp/wine-ent-XXXXXX.plist)
+    cat > "$ent" << 'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.get-task-allow</key>
+    <true/>
+</dict>
+</plist>
+PLIST
+
+    local ok=0
+    # İmzalanacak binary adayları: wine64-preloader en kritik olanı
+    for bin in \
+        "$bin_dir/wine64-preloader" \
+        "$bin_dir/wine-preloader" \
+        "$real_wine" \
+        "/Applications/Wine Stable.app/Contents/Resources/wine/bin/wine64-preloader" \
+        "/Applications/Wine Stable.app/Contents/Resources/wine/bin/wine-preloader"; do
+        [[ -x "$bin" ]] || continue
+        # Gatekeeper quarantine varsa kaldır (imzalama başarısız olabilir)
+        xattr -d com.apple.quarantine "$bin" 2>/dev/null || true
+        if codesign --entitlements "$ent" --force -s - "$bin" 2>/dev/null; then
+            echo "[setup] İmzalandı (get-task-allow): $(basename "$bin")"
+            ok=1
+        else
+            echo "[setup] UYARI: İmzalanamadı: $bin"
+        fi
+    done
+
+    rm -f "$ent"
+
+    if [[ "$ok" -eq 0 ]]; then
+        echo "[setup] UYARI: Hiçbir Wine binary imzalanamadı."
+        echo "[setup]        speedhack çalışmayabilir. brew upgrade sonrası resign_wine.sh çalıştır."
+    else
+        echo "[setup] Memory erişim izni verildi. speedhack artık sudo gerekmez."
+    fi
+}
+
+echo ""
+echo "[setup] Wine memory erişimi yapılandırılıyor..."
+_sign_wine_for_memory_access "$WINE_BIN"
+
 echo ""
 echo "[setup] Tamamlandı! Deimos klasörü: $DEIMOS_DIR"
 echo "  bash run_deimos.sh"
+echo "  bash run_speedhack.sh [çarpan]"
