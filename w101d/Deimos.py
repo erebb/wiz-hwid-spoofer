@@ -1,44 +1,32 @@
 import asyncio
-
-# --- ROOT.WAD KLASORDEN OKUMA YAMASI ---
 import os
 import pathlib
-import wizwalker.file_readers.wad
-
-# macOS Yerel WAD Okuyucu Yaması
-import wizwalker.file_readers.wad
-import os
-def _patched_from_game_data(cls, name, *args, **kwargs):
-    local_path = os.path.join(os.getcwd(), f"{name}.wad")
-    if os.path.exists(local_path):
-        return cls(local_path)
-    return cls(name) # Fallback
-wizwalker.file_readers.wad.Wad.from_game_data = classmethod(_patched_from_game_data)
-
-_orig_from_game_data = wizwalker.file_readers.wad.Wad.from_game_data
-def _patched_from_game_data(cls, name, *args, **kwargs):
-    local_wad = pathlib.Path(os.getcwd()) / f"{name}.wad"
-    if local_wad.exists():
-        return cls(local_wad)
-    return _orig_from_game_data.__func__(cls, name, *args, **kwargs)
-wizwalker.file_readers.wad.Wad.from_game_data = classmethod(_patched_from_game_data)
-# ---------------------------------------
-
 import traceback
 import requests
 import queue
 import threading
 import wizwalker
-
-# macOS Yerel WAD Okuyucu Yaması
 import wizwalker.file_readers.wad
-import os
+
+# --- WAD DOSYA OKUMA YAMASI (macOS cross-prefix) ---
+# Deimos, ~/.w101d_wine prefix'inde çalışır; oyun dosyaları farklı prefix'te.
+# WIZ_DATA_DIR (run_deimos.sh tarafından export edilir) → doğru GameData dizini.
+# Zincir: WIZ_DATA_DIR → cwd → orijinal wizwalker implementasyonu
+_wad_orig = wizwalker.file_readers.wad.Wad.from_game_data
+
 def _patched_from_game_data(cls, name, *args, **kwargs):
-    local_path = os.path.join(os.getcwd(), f"{name}.wad")
-    if os.path.exists(local_path):
-        return cls(local_path)
-    return cls(name) # Fallback
+    wiz_data = os.environ.get("WIZ_DATA_DIR", "").strip()
+    if wiz_data:
+        p = pathlib.Path(wiz_data) / f"{name}.wad"
+        if p.exists():
+            return cls(str(p))
+    local = pathlib.Path(os.getcwd()) / f"{name}.wad"
+    if local.exists():
+        return cls(str(local))
+    return _wad_orig.__func__(cls, name, *args, **kwargs)
+
 wizwalker.file_readers.wad.Wad.from_game_data = classmethod(_patched_from_game_data)
+# ---------------------------------------------------
 from wizwalker import Keycode, HotkeyListener, ModifierKeys, utils, XYZ, Orient
 from wizwalker.utils import get_all_wizard_handles, get_foreground_window
 from wizwalker.client_handler import ClientHandler, Client

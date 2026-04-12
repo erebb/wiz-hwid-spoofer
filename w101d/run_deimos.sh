@@ -118,6 +118,17 @@ _wiz_is_running() {
 # ─────────────────────────────────────────────────────────────────────────────
 echo "[run] Wizard101 Wine + preloader aranıyor..."
 WIZ_EXE=$(_find_wiz_exe)
+
+# WIZ_DATA_DIR: Deimos.py WAD patch'inin oyun dosyalarını bulması için
+if [[ -n "$WIZ_EXE" ]]; then
+    _wiz_prefix_tmp=$(echo "$WIZ_EXE" | sed 's|/drive_c/.*||')
+    _wiz_data_tmp="$_wiz_prefix_tmp/drive_c/ProgramData/KingsIsle Entertainment/Wizard101/Data/GameData"
+    if [[ -d "$_wiz_data_tmp" ]]; then
+        export WIZ_DATA_DIR="$_wiz_data_tmp"
+        echo "[run] WIZ_DATA_DIR : $WIZ_DATA_DIR"
+    fi
+fi
+
 WIZ_WINE=$(_find_wine_from_wineserver)
 
 if [[ -n "$WIZ_WINE" ]]; then
