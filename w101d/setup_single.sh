@@ -176,6 +176,45 @@ echo "[setup] wizwalker site-packages'a kopyalanıyor..."
 rm -rf "$SITE_PKG/wizwalker"
 cp -r "$WIZWALKER_DIR/wizwalker" "$SITE_PKG/wizwalker"
 
+# WIZ_PID cross-wineserver patch: ClientHandler.get_new_clients() içine
+# env-var tabanlı bypass ekler. macOS'ta Wine EnumProcesses yalnızca aynı
+# wineserver'ı görür; WIZ_PID ile direkt Client(pid) yaratarak bunu atlatır.
+echo "[setup] wizwalker WIZ_PID cross-wineserver patch uygulanıyor..."
+python3 -c "
+import pathlib
+handler = pathlib.Path('$SITE_PKG/wizwalker/client_handler.py')
+content = handler.read_text()
+PATCH = '''
+# ── WIZ_PID cross-wineserver patch (macOS / Homebrew Wine) ──────────────────
+import os as _os
+
+_orig_get_new_clients = ClientHandler.get_new_clients
+
+def _get_new_clients_patched(self):
+    _pid_str = _os.environ.get(\"WIZ_PID\", \"\").strip()
+    if _pid_str:
+        try:
+            from wizwalker.client import Client
+            _pid = int(_pid_str)
+            if not any(c.process_id == _pid for c in self.clients):
+                _c = Client(_pid)
+                self.clients.append(_c)
+                return [_c]
+            return []
+        except Exception as _e:
+            print(f\"[WIZ_PID] Direkt baglanti basarisiz ({_e}), normal kesif deneniyor...\")
+    return _orig_get_new_clients(self)
+
+ClientHandler.get_new_clients = _get_new_clients_patched
+# ─────────────────────────────────────────────────────────────────────────────
+'''
+if '_get_new_clients_patched' not in content:
+    handler.write_text(content + PATCH)
+    print('[setup] wizwalker WIZ_PID patch OK')
+else:
+    print('[setup] wizwalker WIZ_PID patch zaten mevcut')
+"
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 6. wiz_tools.py'yi prefix'e kopyala
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

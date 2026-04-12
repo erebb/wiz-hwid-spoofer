@@ -172,6 +172,16 @@ if [[ "$MODE" != "deimos" ]]; then
     cp "$SCRIPT_DIR/wiz_tools.py" "$WINEPREFIX/drive_c/wiz_tools.py"
 fi
 
+# Wizard101 macOS PID'ini bul → Wine içinden task_for_pid ile cross-wineserver erişim
+# EnumProcesses yalnızca aynı wineserver'ı görür; PID ile direkt bağlantı bunu atlatır.
+WIZ_PID=$(ps auxww 2>/dev/null \
+    | grep -i "WizardGraphicalClient" | grep -v grep \
+    | awk '{print $2}' | head -1 || true)
+if [[ -n "$WIZ_PID" ]]; then
+    echo "[run] Wizard101 PID: $WIZ_PID (cross-wineserver bağlantı için)"
+    export WIZ_PID
+fi
+
 echo "[run] Wine       : $WINE_BIN  (Homebrew — tam DLL desteği)"
 echo "[run] WINEPREFIX : $WINEPREFIX  (~/.w101d_wine)"
 echo "[run] Mod        : $MODE"

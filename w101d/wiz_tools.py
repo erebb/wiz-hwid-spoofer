@@ -91,12 +91,23 @@ async def quest_tp_loop(client, stop: asyncio.Event):
 
 # ── Bağlantı + ana döngü ─────────────────────────────────────────────────────
 async def _run(mod: str, multiplier: float):
+    import os
     from wizwalker import ClientHandler
 
+    wiz_pid_env = os.environ.get("WIZ_PID", "").strip()
     print("\n[tools] Wizard101'e bağlanılıyor...")
 
     async with ClientHandler() as handler:
         clients = handler.get_new_clients()
+        if not clients and wiz_pid_env:
+            print(f"[tools] ClientHandler bulamadı, PID {wiz_pid_env} ile direkt deneniyor...")
+            try:
+                from wizwalker.client import Client
+                client = Client(int(wiz_pid_env))
+                handler.clients.append(client)
+                clients = [client]
+            except Exception as e:
+                print(f"[tools] Direkt bağlantı başarısız: {e}")
         if not clients:
             print("[tools] HATA: Çalışan Wizard101 bulunamadı.")
             print("        Önce oyunu Wine ile aç, sonra tekrar çalıştır.")

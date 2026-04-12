@@ -108,6 +108,15 @@ fi
 
 cp "$SCRIPT_DIR/wiz_tools.py" "$WIN_TOOLS"
 
+# Wizard101 macOS PID → task_for_pid ile cross-wineserver erişim
+WIZ_PID=$(ps auxww 2>/dev/null \
+    | grep -i "WizardGraphicalClient" | grep -v grep \
+    | awk '{print $2}' | head -1 || true)
+if [[ -n "$WIZ_PID" ]]; then
+    echo "[tools] Wizard101 PID: $WIZ_PID"
+    export WIZ_PID
+fi
+
 echo "[tools] Wine       : $WINE_BIN  (Homebrew)"
 echo "[tools] WINEPREFIX : $WINEPREFIX"
 echo ""
