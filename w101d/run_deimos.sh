@@ -172,6 +172,45 @@ if [[ "$MODE" != "deimos" ]]; then
     cp "$SCRIPT_DIR/wiz_tools.py" "$WINEPREFIX/drive_c/wiz_tools.py"
 fi
 
+# ── WIZ_PID cross-wineserver patch (her çalışmada uygula) ────────────────────
+# setup_env.sh çalıştırılmadan da patch aktif olsun.
+SITE_PKG="$WINEPREFIX/drive_c/Python313/Lib/site-packages"
+HANDLER_PY="$SITE_PKG/wizwalker/client_handler.py"
+if [[ -f "$HANDLER_PY" ]]; then
+    python3 -c "
+import pathlib
+handler = pathlib.Path('$HANDLER_PY')
+content = handler.read_text()
+PATCH = '''
+# -- WIZ_PID cross-wineserver patch (macOS / Homebrew Wine) ------------------
+import os as _os
+
+_orig_get_new_clients = ClientHandler.get_new_clients
+
+def _get_new_clients_patched(self):
+    _pid_str = _os.environ.get(\"WIZ_PID\", \"\").strip()
+    if _pid_str:
+        try:
+            from wizwalker.client import Client
+            _pid = int(_pid_str)
+            if not any(c.process_id == _pid for c in self.clients):
+                _c = Client(_pid)
+                self.clients.append(_c)
+                return [_c]
+            return []
+        except Exception as _e:
+            print(f\"[WIZ_PID] Direkt baglanti basarisiz ({_e}), normal kesif deneniyor...\")
+    return _orig_get_new_clients(self)
+
+ClientHandler.get_new_clients = _get_new_clients_patched
+# ---------------------------------------------------------------------------
+'''
+if '_get_new_clients_patched' not in content:
+    handler.write_text(content + PATCH)
+    print('[run] wizwalker WIZ_PID patch uygulandı')
+"
+fi
+
 # Wizard101 macOS PID'ini bul → Wine içinden task_for_pid ile cross-wineserver erişim
 # EnumProcesses yalnızca aynı wineserver'ı görür; PID ile direkt bağlantı bunu atlatır.
 WIZ_PID=$(ps auxww 2>/dev/null \
