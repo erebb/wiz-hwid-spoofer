@@ -30,8 +30,8 @@ _find_wiz_exe() {
     for c in "${candidates[@]}"; do
         [[ -f "$c" ]] && echo "$c" && return
     done
-    find "$HOME/Library" /Applications/Wizard101.app \
-         -name "WizardGraphicalClient.exe" -maxdepth 12 2>/dev/null | head -1
+    find "$HOME/Library" -name "WizardGraphicalClient.exe" -maxdepth 12 2>/dev/null \
+        | head -1 || true
 }
 
 # ── Bundled Wine binary'sini bul ─────────────────────────────────────────────
@@ -45,8 +45,9 @@ _find_bundled_wine() {
         "/Applications/Wizard101.app/Contents/MacOS/wine"; do
         [[ -x "$b" ]] && echo "$b" && return
     done
+    [[ -d "/Applications/Wizard101.app" ]] || return 0
     find /Applications/Wizard101.app -name "wine64" -maxdepth 8 2>/dev/null \
-        | grep "/bin/" | head -1
+        | grep "/bin/" | head -1 || true
 }
 
 # ── Preloader imzala (get-task-allow) ─────────────────────────────────────────
@@ -87,10 +88,11 @@ PLIST
 
 # ── Wizard101 process'i çalışıyor mu? ─────────────────────────────────────────
 _wiz_is_running() {
-    ps auxww 2>/dev/null \
+    local out
+    out=$(ps auxww 2>/dev/null \
         | grep -iE "(WizardGraphicalClient|KingsIsle)" \
-        | grep -v "grep\|run_speedhack\|bash\|python" \
-        | grep -q . 2>/dev/null
+        | grep -v "grep\|run_speedhack\|bash\|python" || true)
+    [[ -n "$out" ]]
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
