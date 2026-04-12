@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
-# run_tools.sh — wiz_tools.py'yi Homebrew Wine + ~/.w101d_wine prefix ile çalıştırır.
+# run_tools.sh — wiz_tools.py'yi Wizard101'in Wine prefix'inde başlatır.
 #
-# Neden ~/.w101d_wine: bundled Wine'da propsys.dll.VariantToString yok → crash.
-# Homebrew Wine tam DLL desteği. macOS proc_listallpids() wineserver bağımsız
-# process bulur. Memory erişim task_for_pid ile yapılır (imzalı preloader).
+# Yaklaşım: process env okumak yerine dosya sisteminden Wine prefix'i bulur.
 #
 # KULLANIM:
 #   bash run_tools.sh            → menü
@@ -13,31 +11,56 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/detect_wine.sh"   # WINE_BIN, WINEPREFIX (~/.w101d_wine)
 
-WIN_PYTHON="$WINEPREFIX/drive_c/Python313/python.exe"
-WIN_TOOLS="$WINEPREFIX/drive_c/wiz_tools.py"
+# ── Homebrew Wine bul ─────────────────────────────────────────────────────────
+_find_homebrew_wine() {
+    for c in "/opt/homebrew/bin/wine64" "/opt/homebrew/bin/wine" \
+              "/usr/local/bin/wine64"    "/usr/local/bin/wine"; do
+        [[ -x "$c" ]] && echo "$c" && return
+    done
+}
 
-if [[ ! -f "$WIN_PYTHON" ]]; then
-    echo "[tools] HATA: Python bulunamadı → setup_env.sh çalıştırın." >&2; exit 1
+WINE_BIN=$(_find_homebrew_wine)
+if [[ -z "$WINE_BIN" ]]; then
+    echo "[tools] HATA: Homebrew Wine bulunamadı. brew install --cask wine-stable" >&2; exit 1
 fi
 
-# ── Çalışan wineserver'dan wine binary'sini türet (preloader imzalamak için) ──
-_find_wine_from_wineserver() {
-    local ws
-    ws=$(ps auxww 2>/dev/null | grep -iE "[Ww]ineserver" | grep -v grep \
-         | awk '{print $11}' | head -1)
-    [[ -z "$ws" || ! -x "$ws" ]] && return 0
-    local bin_dir="${ws%/*}"
-    for b in "$bin_dir/wine64" "$bin_dir/wine"; do
+# ── Wizard101 exe'sini dosya sisteminden bul → prefix türet ──────────────────
+_find_wiz_exe() {
+    local candidates=(
+        "$HOME/Library/Application Support/Wizard101/Bottles/wizard101/drive_c/ProgramData/KingsIsle Entertainment/Wizard101/Bin/WizardGraphicalClient.exe"
+        "$HOME/Library/Application Support/Wizard101/Bottles/wizard101/drive_c/Program Files/Wizard101/Bin/WizardGraphicalClient.exe"
+        "$HOME/Library/Application Support/Wizard101/Bottles/wizard101/drive_c/Program Files (x86)/Wizard101/Bin/WizardGraphicalClient.exe"
+        "$HOME/Library/Application Support/Wizard101/drive_c/ProgramData/KingsIsle Entertainment/Wizard101/Bin/WizardGraphicalClient.exe"
+        "$HOME/Library/Application Support/Wizard101/drive_c/Program Files/Wizard101/Bin/WizardGraphicalClient.exe"
+        "$HOME/Library/Application Support/Wizard101/drive_c/Program Files (x86)/Wizard101/Bin/WizardGraphicalClient.exe"
+    )
+    for c in "${candidates[@]}"; do
+        [[ -f "$c" ]] && echo "$c" && return
+    done
+    find "$HOME/Library" /Applications/Wizard101.app \
+         -name "WizardGraphicalClient.exe" -maxdepth 12 2>/dev/null | head -1
+}
+
+# ── Bundled Wine binary'sini bul ─────────────────────────────────────────────
+_find_bundled_wine() {
+    for b in \
+        "/Applications/Wizard101.app/Contents/SharedSupport/wine/bin/wine64" \
+        "/Applications/Wizard101.app/Contents/SharedSupport/wine/bin/wine" \
+        "/Applications/Wizard101.app/Contents/Resources/wine/bin/wine64" \
+        "/Applications/Wizard101.app/Contents/Resources/wine/bin/wine" \
+        "/Applications/Wizard101.app/Contents/MacOS/wine64" \
+        "/Applications/Wizard101.app/Contents/MacOS/wine"; do
         [[ -x "$b" ]] && echo "$b" && return
     done
+    find /Applications/Wizard101.app -name "wine64" -maxdepth 8 2>/dev/null \
+        | grep "/bin/" | head -1
 }
 
 # ── Preloader imzala (get-task-allow) ─────────────────────────────────────────
 _sign_preloader() {
     local wine_bin="${1:-}"
-    [[ -z "$wine_bin" || ! -x "$wine_bin" ]] && return 0
+    [[ -z "$wine_bin" || ! -x "$wine_bin" ]] && return
     local real bin_dir
     real=$(python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" \
            "$wine_bin" 2>/dev/null || echo "$wine_bin")
@@ -72,19 +95,36 @@ PLIST
 
 # ── Wizard101 process'i çalışıyor mu? ─────────────────────────────────────────
 _wiz_is_running() {
-    local out
-    out=$(ps auxww 2>/dev/null \
+    ps auxww 2>/dev/null \
         | grep -iE "(WizardGraphicalClient|KingsIsle)" \
-        | grep -v "grep\|run_tools\|bash\|python" || true)
-    [[ -n "$out" ]]
+        | grep -v "grep\|run_tools\|bash\|python" \
+        | grep -q . 2>/dev/null
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Bundled Wine preloader'ı imzala (memory erişim için)
-WIZ_WINE=$(_find_wine_from_wineserver)
-if [[ -n "$WIZ_WINE" ]]; then
-    echo "[tools] Bundled Wine preloader imzalanıyor: $WIZ_WINE"
-    _sign_preloader "$WIZ_WINE"
+echo "[tools] Wizard101 kurulumu aranıyor..."
+WIZ_EXE=$(_find_wiz_exe)
+
+if [[ -z "$WIZ_EXE" ]]; then
+    echo "[tools] WizardGraphicalClient.exe otomatik bulunamadı."
+    echo "[tools] Lütfen tam yolunu girin:"
+    read -r WIZ_EXE
+fi
+
+if [[ -z "$WIZ_EXE" || ! -f "$WIZ_EXE" ]]; then
+    echo "[tools] HATA: Geçerli exe yolu yok." >&2; exit 1
+fi
+
+WIZ_PREFIX=$(echo "$WIZ_EXE" | sed 's|/drive_c/.*||')
+echo "[tools] Wine prefix: $WIZ_PREFIX"
+
+# Bundled Wine → preloader imzala
+BUNDLED_WINE=$(_find_bundled_wine)
+if [[ -n "$BUNDLED_WINE" ]]; then
+    echo "[tools] Bundled Wine: $BUNDLED_WINE"
+    _sign_preloader "$BUNDLED_WINE"
+else
+    _sign_preloader "$WINE_BIN"
 fi
 
 # Oyunun çalışmasını bekle
@@ -99,64 +139,27 @@ if ! _wiz_is_running; then
     for i in $(seq 1 36); do
         sleep 5
         if _wiz_is_running; then
-            echo "[tools] Wizard101 başladı!"; sleep 5; break
+            echo "[tools] Wizard101 başladı!"; sleep 3; break
         fi
         echo "[tools] Bekleniyor... ($i/36)"
         [[ "$i" -eq 36 ]] && { echo "[tools] HATA: Zaman aşımı." >&2; exit 1; }
     done
 fi
 
+WIN_PYTHON="$WIZ_PREFIX/drive_c/Python313/python.exe"
+WIN_TOOLS="$WIZ_PREFIX/drive_c/wiz_tools.py"
+
+if [[ ! -f "$WIN_PYTHON" ]]; then
+    echo "[tools] HATA: Python bulunamadı → $WIN_PYTHON" >&2
+    echo "[tools]       setup_single.sh veya setup_env.sh çalıştırın." >&2
+    exit 1
+fi
+
 cp "$SCRIPT_DIR/wiz_tools.py" "$WIN_TOOLS"
+export WINEPREFIX="$WIZ_PREFIX"
 
-# ── WIZ_PID cross-wineserver patch (her çalışmada uygula) ────────────────────
-SITE_PKG="$WINEPREFIX/drive_c/Python313/Lib/site-packages"
-HANDLER_PY="$SITE_PKG/wizwalker/client_handler.py"
-if [[ -f "$HANDLER_PY" ]]; then
-    python3 -c "
-import pathlib
-handler = pathlib.Path('$HANDLER_PY')
-content = handler.read_text()
-PATCH = '''
-# -- WIZ_PID cross-wineserver patch (macOS / Homebrew Wine) ------------------
-import os as _os
-
-_orig_get_new_clients = ClientHandler.get_new_clients
-
-def _get_new_clients_patched(self):
-    _pid_str = _os.environ.get(\"WIZ_PID\", \"\").strip()
-    if _pid_str:
-        try:
-            from wizwalker.client import Client
-            _pid = int(_pid_str)
-            if not any(c.process_id == _pid for c in self.clients):
-                _c = Client(_pid)
-                self.clients.append(_c)
-                return [_c]
-            return []
-        except Exception as _e:
-            print(f\"[WIZ_PID] Direkt baglanti basarisiz ({_e}), normal kesif deneniyor...\")
-    return _orig_get_new_clients(self)
-
-ClientHandler.get_new_clients = _get_new_clients_patched
-# ---------------------------------------------------------------------------
-'''
-if '_get_new_clients_patched' not in content:
-    handler.write_text(content + PATCH)
-    print('[tools] wizwalker WIZ_PID patch uygulandı')
-"
-fi
-
-# Wizard101 macOS PID → task_for_pid ile cross-wineserver erişim
-WIZ_PID=$(ps auxww 2>/dev/null \
-    | grep -i "WizardGraphicalClient" | grep -v grep \
-    | awk '{print $2}' | head -1 || true)
-if [[ -n "$WIZ_PID" ]]; then
-    echo "[tools] Wizard101 PID: $WIZ_PID"
-    export WIZ_PID
-fi
-
-echo "[tools] Wine       : $WINE_BIN  (Homebrew)"
-echo "[tools] WINEPREFIX : $WINEPREFIX"
+echo "[tools] Wine       : $WINE_BIN"
+echo "[tools] WINEPREFIX : $WIZ_PREFIX"
 echo ""
 
 exec "$WINE_BIN" "$WIN_PYTHON" "$WIN_TOOLS" "$@"

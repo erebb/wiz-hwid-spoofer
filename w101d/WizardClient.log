@@ -1,0 +1,17 @@
+04/12/26 11:24:04 [DBGM] CORE_SEER       WizardGraphicalClient::Initialize Window name = Wizard101
+04/12/26 11:24:04 [STAT] CORE_SEER       Wizard Graphical Client version 'W.1.600.01'; revision ''. Data version ''.
+04/12/26 11:24:04 [DBGM] CORE_SEER       StringTable.xml file does not exist for the en-US language. Using default values
+04/12/26 11:24:04 [STAT] CORE_SEER       LOCALE = en-US
+04/12/26 11:24:04 [ERRO] MessageManager  2023014567 MessageManager::LoadMessageModule: RequestAsset failed for 'BaseMessages.xml'.
+04/12/26 11:24:04 [ERRO] MessageManager  2023014567 MessageManager::LoadMessageModule: RequestAsset failed for 'ExtendedBaseMessages.xml'.
+04/12/26 11:24:04 [ERRO] MessageManager  2023014567 MessageManager::LoadMessageModule: RequestAsset failed for 'LoginMessages.xml'.
+04/12/26 11:24:04 [ERRO] MessageManager  2023014567 MessageManager::LoadMessageModule: RequestAsset failed for 'GameMessages.xml'.
+04/12/26 11:24:04 [ERRO] MessageManager  2023014567 MessageManager::LoadMessageModule: RequestAsset failed for 'GameMessages2.xml'.
+04/12/26 11:24:04 [ERRO] MessageManager  2023014567 MessageManager::LoadMessageModule: RequestAsset failed for 'AISClientMessages.xml'.
+04/12/26 11:24:04 [ERRO] MessageManager  2023014567 MessageManager::LoadMessageModule: RequestAsset failed for 'WizardMessages.xml'.
+04/12/26 11:24:04 [DBGM] CORE_SEER       ERROR: "Could not load WizardMessages.xml!", File: C:\Code\Wizard101\Wizard_1_600\Wizard101\Client\WizardGraphicalClient\WizardGraphicalClient.cpp, Line: 9530
+04/12/26 11:24:09 [ERRO] CORE_SEER       1967074143 Failed to load Specific Message Modules.
+04/12/26 11:24:10 [STAT] COMMON          ResourceManager is shutting down.
+04/12/26 11:24:10 [STAT] RESMGR          ResourceManager releasing data.
+04/12/26 11:24:10 [STAT] RESMGR          Loading CSR data.
+
