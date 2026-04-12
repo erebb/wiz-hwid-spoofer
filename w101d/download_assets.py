@@ -27,8 +27,28 @@ from typing import Optional
 
 # ── Ayarlar ──────────────────────────────────────────────────────────────────
 PATCH_HOST    = "versionak.us.wizard101.com"
-FILE_LIST_URL = f"http://{PATCH_HOST}/Windows/LatestFileList.bin"
-DOWNLOAD_BASE = f"http://{PATCH_HOST}/LatestBuild/Data/GameData/"
+
+# HTTPS + HTTP sırasıyla denenir; hangi kombinasyon 403 vermezse kullanılır.
+_CANDIDATE_FILE_LIST_URLS = [
+    f"https://{PATCH_HOST}/Windows/LatestFileList.bin",
+    f"http://{PATCH_HOST}/Windows/LatestFileList.bin",
+    f"https://{PATCH_HOST}/LatestFileList.bin",
+    f"http://{PATCH_HOST}/LatestFileList.bin",
+]
+_CANDIDATE_DOWNLOAD_BASES = [
+    f"https://{PATCH_HOST}/LatestBuild/Data/GameData/",
+    f"http://{PATCH_HOST}/LatestBuild/Data/GameData/",
+]
+
+# Çalışma zamanında seçilen URL'ler (fetch_file_list() sonrası belirlenir)
+FILE_LIST_URL: str = _CANDIDATE_FILE_LIST_URLS[0]
+DOWNLOAD_BASE: str = _CANDIDATE_DOWNLOAD_BASES[0]
+
+# KingsIsle launcher'ına benzeterek 403'ten kaçın
+_HEADERS = {
+    "User-Agent": "KingsIsle Patcher",
+    "Accept": "*/*",
+}
 
 # Dosya listesinde yer almayan ama gerekli dosyalar (AdditionalFiles.txt'ten)
 EXTRA_FILES = ["Mob-WorldData.wad", "Music-WorldData.wad"]
@@ -80,10 +100,34 @@ def find_game_data_dir() -> Optional[pathlib.Path]:
 
 # ── Dosya listesi indirme ─────────────────────────────────────────────────────
 def fetch_file_list() -> bytes:
-    print(f"[setup] Dosya listesi alınıyor: {FILE_LIST_URL}")
-    req = urllib.request.Request(FILE_LIST_URL, headers={"User-Agent": "WizPatcher/1.0"})
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        return resp.read()
+    """
+    LatestFileList.bin'i aday URL'lerden sırasıyla dener.
+    Başarılı olan URL'e göre DOWNLOAD_BASE'i de günceller.
+    """
+    global FILE_LIST_URL, DOWNLOAD_BASE
+
+    last_err: Exception = Exception("Hiç URL denenmedi")
+
+    for fl_url in _CANDIDATE_FILE_LIST_URLS:
+        try:
+            print(f"[setup] Dosya listesi deneniyor: {fl_url}")
+            req = urllib.request.Request(fl_url, headers=_HEADERS)
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = resp.read()
+            FILE_LIST_URL = fl_url
+            # Aynı scheme'i (https/http) download base için de kullan
+            scheme = fl_url.split("://")[0]
+            DOWNLOAD_BASE = f"{scheme}://{PATCH_HOST}/LatestBuild/Data/GameData/"
+            print(f"[setup] Bağlantı başarılı → {scheme.upper()} kullanılıyor")
+            return data
+        except urllib.error.HTTPError as e:
+            print(f"[setup]   {fl_url} → HTTP {e.code}")
+            last_err = e
+        except Exception as e:
+            print(f"[setup]   {fl_url} → {e}")
+            last_err = e
+
+    raise last_err
 
 
 # ── Dosya listesi ayrıştırma ─────────────────────────────────────────────────
@@ -146,7 +190,7 @@ def download_one(filename: str, dest: pathlib.Path, idx: int, total: int) -> tup
     for attempt in range(1, MAX_RETRIES + 1):
         _throttle()
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "WizPatcher/1.0"})
+            req = urllib.request.Request(url, headers=dict(_HEADERS))
 
             if existing > 0:
                 req.add_header("Range", f"bytes={existing}-")
