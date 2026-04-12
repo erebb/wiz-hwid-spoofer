@@ -94,6 +94,18 @@ PLIST
     [[ "$signed" -eq 0 ]] && echo "[tools] UYARI: Preloader imzalanamadı."
 }
 
+# ── Çalışan wineserver'dan wine binary'sini türet ─────────────────────────────
+_find_wine_from_wineserver() {
+    local ws
+    ws=$(ps auxww 2>/dev/null | grep -iE "[Ww]ineserver" | grep -v grep \
+         | awk '{print $11}' | head -1)
+    [[ -z "$ws" || ! -x "$ws" ]] && return 0
+    local bin_dir="${ws%/*}"
+    for b in "$bin_dir/wine64" "$bin_dir/wine"; do
+        [[ -x "$b" ]] && echo "$b" && return
+    done
+}
+
 # ── Wizard101 process'i çalışıyor mu? ─────────────────────────────────────────
 _wiz_is_running() {
     local out
@@ -120,15 +132,6 @@ fi
 WIZ_PREFIX=$(echo "$WIZ_EXE" | sed 's|/drive_c/.*||')
 echo "[tools] Wine prefix: $WIZ_PREFIX"
 
-# Bundled Wine → preloader imzala
-BUNDLED_WINE=$(_find_bundled_wine)
-if [[ -n "$BUNDLED_WINE" ]]; then
-    echo "[tools] Bundled Wine: $BUNDLED_WINE"
-    _sign_preloader "$BUNDLED_WINE"
-else
-    _sign_preloader "$WINE_BIN"
-fi
-
 # Oyunun çalışmasını bekle
 if ! _wiz_is_running; then
     echo "[tools] Wizard101 çalışmıyor."
@@ -141,11 +144,22 @@ if ! _wiz_is_running; then
     for i in $(seq 1 36); do
         sleep 5
         if _wiz_is_running; then
-            echo "[tools] Wizard101 başladı!"; sleep 3; break
+            echo "[tools] Wizard101 başladı!"; sleep 5; break
         fi
         echo "[tools] Bekleniyor... ($i/36)"
         [[ "$i" -eq 36 ]] && { echo "[tools] HATA: Zaman aşımı." >&2; exit 1; }
     done
+fi
+
+# Wineserver wine'ı bul + preloader imzala
+WIZ_WINE=$(_find_wine_from_wineserver)
+if [[ -n "$WIZ_WINE" ]]; then
+    echo "[tools] Wineserver Wine'ı: $WIZ_WINE"
+    _sign_preloader "$WIZ_WINE"
+    WINE_BIN="$WIZ_WINE"
+else
+    echo "[tools] Wineserver Wine'ı bulunamadı → Homebrew Wine kullanılıyor"
+    _sign_preloader "$WINE_BIN"
 fi
 
 WIN_PYTHON="$WIZ_PREFIX/drive_c/Python313/python.exe"

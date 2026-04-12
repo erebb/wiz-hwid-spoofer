@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # run_deimos.sh — Wizard101 araçlarını çalıştırır.
 #
-# Yaklaşım: process env okumak yerine dosya sisteminden Wine prefix'i bulur.
-# Bundled Wine (Wizard101.app) child env'a WINEPREFIX koymadığından
-# process tespiti yerine kurulum dizini taraması kullanılır.
+# Wineserver version mismatch çözümü:
+#   Oyun kendi wineserver'ını başlatır. Farklı versiyonlu Homebrew Wine
+#   bu wineserver'a bağlanamaz (version mismatch). Çözüm: çalışan
+#   wineserver'ın binary yolundan wine64'ü türet ve O'nu kullan.
 #
 # KULLANIM:
 #   bash run_deimos.sh              → Deimos
@@ -11,6 +12,197 @@
 #   bash run_deimos.sh quest        → quest TP
 #   bash run_deimos.sh both [N]     → ikisi birden
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/detect_wine.sh"   # WINE_BIN (Homebrew Wine, fallback)
+
+MODE="${1:-deimos}"
+MULTIPLIER="${2:-3}"
+OUR_PYTHON="$HOME/.w101d_wine/drive_c/Python313"
+DEIMOS_DIR="${DEIMOS_DIR:-$HOME/.w101d_cache/Deimos}"
+
+# ── Kurulum kontrolü ──────────────────────────────────────────────────────────
+if [[ ! -d "$OUR_PYTHON" ]]; then
+    echo "[run] HATA: Python bulunamadı. Önce setup_env.sh çalıştırın." >&2; exit 1
+fi
+if [[ "$MODE" == "deimos" && ! -f "$DEIMOS_DIR/Deimos.py" ]]; then
+    echo "[run] HATA: Deimos bulunamadı." >&2; exit 1
+fi
+
+# ── Wizard101 exe'sini dosya sisteminden bul → prefix türet ──────────────────
+_find_wiz_exe() {
+    local candidates=(
+        "$HOME/Library/Application Support/Wizard101/Bottles/wizard101/drive_c/ProgramData/KingsIsle Entertainment/Wizard101/Bin/WizardGraphicalClient.exe"
+        "$HOME/Library/Application Support/Wizard101/Bottles/wizard101/drive_c/Program Files/Wizard101/Bin/WizardGraphicalClient.exe"
+        "$HOME/Library/Application Support/Wizard101/Bottles/wizard101/drive_c/Program Files (x86)/Wizard101/Bin/WizardGraphicalClient.exe"
+        "$HOME/Library/Application Support/Wizard101/drive_c/ProgramData/KingsIsle Entertainment/Wizard101/Bin/WizardGraphicalClient.exe"
+        "$HOME/Library/Application Support/Wizard101/drive_c/Program Files/Wizard101/Bin/WizardGraphicalClient.exe"
+        "$HOME/Library/Application Support/Wizard101/drive_c/Program Files (x86)/Wizard101/Bin/WizardGraphicalClient.exe"
+    )
+    for c in "${candidates[@]}"; do
+        [[ -f "$c" ]] && echo "$c" && return
+    done
+    find "$HOME/Library" -name "WizardGraphicalClient.exe" -maxdepth 12 2>/dev/null \
+        | head -1 || true
+}
+
+# ── Çalışan wineserver'dan wine binary'sini türet ─────────────────────────────
+# Bu yöntem version mismatch'i önler: wineserver hangi wine ile başladıysa
+# o wine binary'sini kullanırız — tam versiyon uyumu garantili.
+_find_wine_from_wineserver() {
+    local ws
+    ws=$(ps auxww 2>/dev/null | grep -iE "[Ww]ineserver" | grep -v grep \
+         | awk '{print $11}' | head -1)
+    [[ -z "$ws" || ! -x "$ws" ]] && return 0
+    local bin_dir="${ws%/*}"
+    for b in "$bin_dir/wine64" "$bin_dir/wine"; do
+        [[ -x "$b" ]] && echo "$b" && return
+    done
+}
+
+# ── Preloader imzala (get-task-allow) ─────────────────────────────────────────
+_sign_preloader() {
+    local wine_bin="${1:-}"
+    [[ -z "$wine_bin" || ! -x "$wine_bin" ]] && return 0
+    local real bin_dir
+    real=$(python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" \
+           "$wine_bin" 2>/dev/null || echo "$wine_bin")
+    bin_dir=$(dirname "$real")
+
+    local ent signed=0
+    ent=$(mktemp /tmp/wine-ent-XXXXXX.plist)
+    cat > "$ent" << 'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.get-task-allow</key>
+    <true/>
+</dict>
+</plist>
+PLIST
+    for d in "$bin_dir" "$(dirname "$wine_bin")"; do
+        for b in "$d/wine64-preloader" "$d/wine-preloader"; do
+            [[ -x "$b" ]] || continue
+            xattr -d com.apple.quarantine "$b" 2>/dev/null || true
+            if codesign --entitlements "$ent" --force -s - "$b" 2>/dev/null; then
+                echo "[run] İmzalandı (get-task-allow): $(basename "$b")"
+                signed=1
+            fi
+        done
+    done
+    rm -f "$ent"
+    if [[ "$signed" -eq 0 ]]; then
+        echo "[run] UYARI: Preloader imzalanamadı."
+    else
+        echo "[run] NOT: İmza yeni açılışta geçerli olur → oyunu kapat/aç."
+    fi
+}
+
+# ── Wizard101 process'i çalışıyor mu? ─────────────────────────────────────────
+_wiz_is_running() {
+    local out
+    out=$(ps auxww 2>/dev/null \
+        | grep -iE "(WizardGraphicalClient|KingsIsle)" \
+        | grep -v "grep\|run_deimos\|bash\|python" || true)
+    [[ -n "$out" ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 1. Dosya sisteminden Wizard101 kurulumunu bul
+# ─────────────────────────────────────────────────────────────────────────────
+echo "[run] Wizard101 kurulumu aranıyor..."
+WIZ_EXE=$(_find_wiz_exe)
+
+if [[ -z "$WIZ_EXE" ]]; then
+    echo "[run] WizardGraphicalClient.exe otomatik bulunamadı."
+    echo "[run] Lütfen tam yolunu girin:"
+    read -r WIZ_EXE
+fi
+
+if [[ -z "$WIZ_EXE" || ! -f "$WIZ_EXE" ]]; then
+    echo "[run] HATA: Geçerli exe yolu yok: $WIZ_EXE" >&2; exit 1
+fi
+
+WIZ_PREFIX=$(echo "$WIZ_EXE" | sed 's|/drive_c/.*||')
+echo "[run] Wizard101 prefix: $WIZ_PREFIX"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 2. Oyunun çalışmasını bekle / aç
+# ─────────────────────────────────────────────────────────────────────────────
+if ! _wiz_is_running; then
+    echo "[run] Wizard101 çalışmıyor."
+    if [[ -d "/Applications/Wizard101.app" ]]; then
+        echo "[run] Wizard101 açılıyor..."
+        open -a Wizard101 2>/dev/null || open /Applications/Wizard101.app 2>/dev/null || true
+    else
+        echo "[run] Lütfen Wizard101'i manuel olarak açın."
+    fi
+    echo "[run] Oyunun yüklenmesi bekleniyor..."
+    for i in $(seq 1 36); do
+        sleep 5
+        if _wiz_is_running; then
+            echo "[run] Wizard101 başladı!"; sleep 5; break
+        fi
+        echo "[run] Bekleniyor... ($i/36)"
+        [[ "$i" -eq 36 ]] && { echo "[run] HATA: Zaman aşımı." >&2; exit 1; }
+    done
+fi
+
+echo "[run] Wizard101 çalışıyor."
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 3. Çalışan wineserver'dan wine binary'sini bul + preloader imzala
+#    Bu yöntem version mismatch'i %100 önler.
+# ─────────────────────────────────────────────────────────────────────────────
+WIZ_WINE=$(_find_wine_from_wineserver)
+
+if [[ -n "$WIZ_WINE" ]]; then
+    echo "[run] Wineserver Wine'ı bulundu: $WIZ_WINE"
+    _sign_preloader "$WIZ_WINE"
+    ACTIVE_WINE="$WIZ_WINE"
+    echo "[run] Aynı Wine kullanılıyor → version mismatch yok"
+else
+    echo "[run] Wineserver Wine'ı bulunamadı → Homebrew Wine kullanılıyor"
+    _sign_preloader "$WINE_BIN"
+    ACTIVE_WINE="$WINE_BIN"
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4. Python'u oyunun prefix'ine kopyala (yoksa)
+# ─────────────────────────────────────────────────────────────────────────────
+WIN_PYTHON="$WIZ_PREFIX/drive_c/Python313/python.exe"
+if [[ ! -f "$WIN_PYTHON" ]]; then
+    echo "[run] Python kopyalanıyor → $WIZ_PREFIX/drive_c/Python313"
+    cp -r "$OUR_PYTHON" "$WIZ_PREFIX/drive_c/Python313"
+fi
+if [[ "$MODE" != "deimos" ]]; then
+    cp "$SCRIPT_DIR/wiz_tools.py" "$WIZ_PREFIX/drive_c/wiz_tools.py"
+fi
+
+export WINEPREFIX="$WIZ_PREFIX"
+echo "[run] WINEPREFIX : $WIZ_PREFIX"
+echo "[run] Wine       : $ACTIVE_WINE"
+echo "[run] Mod        : $MODE"
+echo ""
+
+case "$MODE" in
+    deimos)
+        echo "[run] Deimos başlatılıyor..."
+        cd "$DEIMOS_DIR"
+        exec "$ACTIVE_WINE" "$WIN_PYTHON" Deimos.py
+        ;;
+    speed|quest|both)
+        echo "[run] wiz_tools başlatılıyor ($MODE)..."
+        exec "$ACTIVE_WINE" "$WIN_PYTHON" \
+            "$WIZ_PREFIX/drive_c/wiz_tools.py" "$MODE" "$MULTIPLIER"
+        ;;
+    *)
+        echo "[run] HATA: Bilinmeyen mod '$MODE'" >&2; exit 1
+        ;;
+esac
+
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/detect_wine.sh"   # WINE_BIN (Homebrew Wine)
