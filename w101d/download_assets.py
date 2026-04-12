@@ -26,18 +26,30 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
 # ── Ayarlar ──────────────────────────────────────────────────────────────────
-PATCH_HOST    = "versionak.us.wizard101.com"
+PATCH_HOST      = "versionak.us.wizard101.com"
+PATCH_HOST_ALT  = "patch.us.wizard101.com"
 
-# HTTPS + HTTP sırasıyla denenir; hangi kombinasyon 403 vermezse kullanılır.
+# Tüm bilinen yollar sırasıyla denenir.
+# 404 → path yanlış, 403 → scheme/User-Agent sorunu, 200 → başarılı.
 _CANDIDATE_FILE_LIST_URLS = [
-    f"https://{PATCH_HOST}/Windows/LatestFileList.bin",
+    # Ana sunucu — farklı path varyantları
     f"http://{PATCH_HOST}/Windows/LatestFileList.bin",
-    f"https://{PATCH_HOST}/LatestFileList.bin",
+    f"http://{PATCH_HOST}/LatestBuild/Windows/LatestFileList.bin",
+    f"http://{PATCH_HOST}/LatestBuild/Data/GameData/LatestFileList.bin",
     f"http://{PATCH_HOST}/LatestFileList.bin",
+    # HTTPS varyantları
+    f"https://{PATCH_HOST}/Windows/LatestFileList.bin",
+    f"https://{PATCH_HOST}/LatestBuild/Windows/LatestFileList.bin",
+    f"https://{PATCH_HOST}/LatestBuild/Data/GameData/LatestFileList.bin",
+    # Alternatif host
+    f"http://{PATCH_HOST_ALT}/Windows/LatestFileList.bin",
+    f"http://{PATCH_HOST_ALT}/LatestBuild/Windows/LatestFileList.bin",
+    f"https://{PATCH_HOST_ALT}/Windows/LatestFileList.bin",
 ]
 _CANDIDATE_DOWNLOAD_BASES = [
-    f"https://{PATCH_HOST}/LatestBuild/Data/GameData/",
     f"http://{PATCH_HOST}/LatestBuild/Data/GameData/",
+    f"https://{PATCH_HOST}/LatestBuild/Data/GameData/",
+    f"http://{PATCH_HOST_ALT}/LatestBuild/Data/GameData/",
 ]
 
 # Çalışma zamanında seçilen URL'ler (fetch_file_list() sonrası belirlenir)
@@ -110,23 +122,30 @@ def fetch_file_list() -> bytes:
 
     for fl_url in _CANDIDATE_FILE_LIST_URLS:
         try:
-            print(f"[setup] Dosya listesi deneniyor: {fl_url}")
+            print(f"[setup] Deneniyor: {fl_url}")
             req = urllib.request.Request(fl_url, headers=_HEADERS)
             with urllib.request.urlopen(req, timeout=30) as resp:
                 data = resp.read()
             FILE_LIST_URL = fl_url
-            # Aynı scheme'i (https/http) download base için de kullan
+            # Aynı host+scheme'i download base için de kullan
             scheme = fl_url.split("://")[0]
-            DOWNLOAD_BASE = f"{scheme}://{PATCH_HOST}/LatestBuild/Data/GameData/"
-            print(f"[setup] Bağlantı başarılı → {scheme.upper()} kullanılıyor")
+            host   = fl_url.split("://")[1].split("/")[0]
+            DOWNLOAD_BASE = f"{scheme}://{host}/LatestBuild/Data/GameData/"
+            print(f"[setup] Başarılı → {fl_url}  ({len(data):,} byte)")
             return data
         except urllib.error.HTTPError as e:
-            print(f"[setup]   {fl_url} → HTTP {e.code}")
+            print(f"[setup]   HTTP {e.code} → {fl_url}")
+            last_err = e
+        except urllib.error.URLError as e:
+            print(f"[setup]   Bağlantı hatası → {fl_url}: {e.reason}")
             last_err = e
         except Exception as e:
-            print(f"[setup]   {fl_url} → {e}")
+            print(f"[setup]   Hata → {fl_url}: {e}")
             last_err = e
 
+    print()
+    print("[setup] HATA: Hiçbir URL çalışmadı. Yukarıdaki HTTP kodlarını kontrol edin.")
+    print("[setup] 404 → path yanlış, 403 → sunucu reddetti, bağlantı hatası → DNS/ağ sorunu")
     raise last_err
 
 
