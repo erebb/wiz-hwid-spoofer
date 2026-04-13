@@ -32,17 +32,8 @@ if [[ "$MODE" == "deimos" && ! -f "$DEIMOS_DIR/Deimos.py" ]]; then
     exit 1
 fi
 
-# ── Deimos.py otomatik güncelle (repo'daki versiyonu kullan) ──────────────────
-# w101d/Deimos.py → macOS yamalarımızı içerir (WAD patch, cross-prefix vb.)
-# Deimos repo'sunun kendi Deimos.py'sinin üzerine yazar.
-_REPO_DEIMOS="$SCRIPT_DIR/Deimos.py"
-_CACHE_DEIMOS="$DEIMOS_DIR/Deimos.py"
-if [[ -f "$_REPO_DEIMOS" ]]; then
-    if ! diff -q "$_REPO_DEIMOS" "$_CACHE_DEIMOS" &>/dev/null; then
-        cp "$_REPO_DEIMOS" "$_CACHE_DEIMOS"
-        echo "[run] Deimos.py güncellendi (repo versiyonu)"
-    fi
-fi
+# Deimos.py: Deimos reposundaki orijinal kullanılır (~/.w101d_cache/Deimos/Deimos.py)
+# macOS yamaları sitecustomize.py üzerinden otomatik uygulanır → Deimos.py'e dokunmaz.
 
 # ── Wizard101 exe'sini dosya sisteminden bul (preloader imzalamak için) ───────
 _find_wiz_exe() {
@@ -195,9 +186,21 @@ if [[ "$MODE" != "deimos" ]]; then
     cp "$SCRIPT_DIR/wiz_tools.py" "$WINEPREFIX/drive_c/wiz_tools.py"
 fi
 
+# ── macOS yamaları: sitecustomize.py üzerinden uygulanır ─────────────────────
+# Deimos.py'e dokunmaz; Wine Python her başladığında otomatik çalışır.
+SITE_PKG="$WINEPREFIX/drive_c/Python313/Lib/site-packages"
+_SITECUST="$SITE_PKG/sitecustomize.py"
+_PATCHES_SRC="$SCRIPT_DIR/macos_patches.py"
+if [[ -f "$_PATCHES_SRC" ]]; then
+    # sitecustomize.py yoksa oluştur; içeriği farklıysa güncelle
+    if ! diff -q "$_PATCHES_SRC" "$_SITECUST" &>/dev/null; then
+        cp "$_PATCHES_SRC" "$_SITECUST"
+        echo "[run] sitecustomize.py güncellendi (macOS WAD yaması)"
+    fi
+fi
+
 # ── WIZ_PID cross-wineserver patch (her çalışmada uygula) ────────────────────
 # setup_env.sh çalıştırılmadan da patch aktif olsun.
-SITE_PKG="$WINEPREFIX/drive_c/Python313/Lib/site-packages"
 HANDLER_PY="$SITE_PKG/wizwalker/client_handler.py"
 if [[ -f "$HANDLER_PY" ]]; then
     python3 -c "
