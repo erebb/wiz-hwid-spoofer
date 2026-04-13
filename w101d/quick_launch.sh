@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # quick_launch.sh — Wizard101'i launcher olmadan direkt başlatır (otomatik giriş).
 #
-# Streaming sorunu neden çözüldü:
-#   Eski sürüm detect_wine.sh'dan gelen ~/.w101d_wine prefix'ini kullanıyordu.
-#   Oyun kendi prefix'inde (Bottles/wizard101) kurulu olduğu için registry,
-#   data path'leri ve patch server bilgisi orada. Yanlış prefix → streaming çalışmaz.
-#   Bu sürüm oyunun kendi prefix'ini otomatik bulur ve WINEPREFIX olarak set eder.
+# Auth akışı (cedws/umbra-launcher ve MidasModLoader/Launcher kaynaklarına göre):
+#   1. ki_auth.py KI login sunucusuna bağlanır, Twofish-OFB handshake yapar
+#   2. uid + ck2 token alır
+#   3. Oyun: -L login.us.wizard101.com 12000 -U ..{uid} {ck2} {username}
+#
+# Streaming fix:
+#   WINEPREFIX oyunun kendi Bottles prefix'ine set edilir → registry + data path doğru.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -99,15 +101,34 @@ if [[ ! -x "$WINE_BIN" ]]; then
     exit 1
 fi
 
+# ── KI Auth: uid + ck2 token al ──────────────────────────────────────────────
+echo "[QuickLaunch] KI sunucusuna bağlanılıyor (ki_auth.py)..."
+AUTH_OUT=$(python3 "$SCRIPT_DIR/ki_auth.py" "$WIZ_USER" "$WIZ_PASS" 2>&1) || {
+    echo "[QuickLaunch] HATA: Kimlik doğrulama başarısız!"
+    echo "  $AUTH_OUT"
+    echo "  → Kullanıcı adı/şifre doğru mu? İnternet bağlantısı var mı?"
+    echo "  → pycryptodome kurulu mu? (pip3 install pycryptodome)"
+    exit 1
+}
+WIZ_UID=$(echo "$AUTH_OUT" | awk '{print $1}')
+WIZ_CK2=$(echo "$AUTH_OUT" | awk '{print $2}')
+if [[ -z "$WIZ_UID" || -z "$WIZ_CK2" ]]; then
+    echo "[QuickLaunch] HATA: ki_auth.py geçersiz çıktı verdi: $AUTH_OUT"
+    exit 1
+fi
+echo "[QuickLaunch] Auth     : OK (uid=$WIZ_UID)"
+
 echo "[QuickLaunch] Oyun başlatılıyor..."
 echo "[QuickLaunch] (İlk 10 saniye Wine çıktısı aşağıda görünür — normal)"
 echo ""
 
 cd "$WIZ_BIN_DIR"
-# /dev/null yok: hata mesajları görünsün diye stderr açık bırakıyoruz
+# Doğru arg formatı (umbra-launcher + MidasModLoader referansına göre):
+#   -L <host> <port> -U ..<uid> <ck2> <username>
+# NOT: -u/-p değil, önce token alıp -U ile geçilmeli
 "$WINE_BIN" WizardGraphicalClient.exe \
     -L login.us.wizard101.com 12000 \
-    -u "$WIZ_USER" -p "$WIZ_PASS" \
+    -U "..$WIZ_UID" "$WIZ_CK2" "$WIZ_USER" \
     2>&1 | head -40 &
 
 # Oyunun başlayıp başlamadığını kısa süre izle
