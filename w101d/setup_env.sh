@@ -58,6 +58,13 @@ fi
 echo "[setup] pip güncelleniyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
     -m pip install --quiet --upgrade pip
+WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
+    -m pip install pycryptodome
+WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
+    -m	pip3 install twofish
+WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" 
+    -m pip install pytesseract opencv-python
+
 
 # ── Deimos reposunu indir ────────────────────
 # PySimpleGUI wheel ve kaynak kod için
