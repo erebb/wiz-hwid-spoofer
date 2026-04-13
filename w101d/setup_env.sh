@@ -94,6 +94,16 @@ WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
         "pefile>=2021.5.24" \
         "lark>=1.1.9"
 
+# ── Ekran okuma bağımlılıkları (questing için) ─
+# is_visible_by_path → Pillow (görüntü yükleme) + opencv (template matching)
+# Dialogue/combat memory tabanlı çalışır; questing ekran okur → bu paketler gerekli.
+echo "[setup] Ekran okuma paketleri kuruluyor (Pillow, opencv)..."
+WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
+    -m pip install --quiet --prefer-binary \
+        "Pillow>=10.0.0" \
+        "opencv-python-headless>=4.8.0" \
+        "numpy>=1.26.0"
+
 # PySimpleGUI — Deimos'un kendi wheel'ından (PyPI'dan kaldırıldı)
 echo "[setup] PySimpleGUI kuruluyor (Deimos wheel)..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \

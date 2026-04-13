@@ -32,6 +32,18 @@ if [[ "$MODE" == "deimos" && ! -f "$DEIMOS_DIR/Deimos.py" ]]; then
     exit 1
 fi
 
+# ── Deimos.py otomatik güncelle (repo'daki versiyonu kullan) ──────────────────
+# w101d/Deimos.py → macOS yamalarımızı içerir (WAD patch, cross-prefix vb.)
+# Deimos repo'sunun kendi Deimos.py'sinin üzerine yazar.
+_REPO_DEIMOS="$SCRIPT_DIR/Deimos.py"
+_CACHE_DEIMOS="$DEIMOS_DIR/Deimos.py"
+if [[ -f "$_REPO_DEIMOS" ]]; then
+    if ! diff -q "$_REPO_DEIMOS" "$_CACHE_DEIMOS" &>/dev/null; then
+        cp "$_REPO_DEIMOS" "$_CACHE_DEIMOS"
+        echo "[run] Deimos.py güncellendi (repo versiyonu)"
+    fi
+fi
+
 # ── Wizard101 exe'sini dosya sisteminden bul (preloader imzalamak için) ───────
 _find_wiz_exe() {
     local candidates=(
