@@ -89,19 +89,62 @@ fi
 
 WIZ_PREFIX=$(echo "$WIZ_EXE" | sed 's|/drive_c/.*||')
 WIZ_BIN_DIR=$(dirname "$WIZ_EXE")
-WINE_BIN=$(_find_bundled_wine)
 
-# Oyunun kendi prefix'ini kullan → registry + data path'leri doğru → streaming çalışır
-export WINEPREFIX="$WIZ_PREFIX"
+# ── Homebrew Wine kullan (Deimos ile aynı wineserver → Deimos oyunu görür) ───
+# Bundled Wine kullanmak Deimos'u kör eder (farklı wineserver).
+# Homebrew Wine + ~/.w101d_wine = Deimos ile aynı prefix+wineserver.
+source "$SCRIPT_DIR/detect_wine.sh"   # WINE_BIN (Homebrew), WINEPREFIX (~/.w101d_wine)
+DEIMOS_PREFIX="$WINEPREFIX"           # ~/.w101d_wine
+
+# Oyun data dizinini Deimos prefix'ine symlink et
+# Böylece game registry'deki C:\ProgramData\... yolu ~/.w101d_wine içinden çözümlenir.
+_setup_game_symlinks() {
+    local src_c="$WIZ_PREFIX/drive_c"
+    local dst_c="$DEIMOS_PREFIX/drive_c"
+    local linked=0
+    for item in \
+        "ProgramData/KingsIsle Entertainment" \
+        "users/Public/Games/KingsIsle Entertainment"; do
+        local src="$src_c/$item"
+        local dst="$dst_c/$item"
+        if [[ -d "$src" && ! -e "$dst" ]]; then
+            mkdir -p "$(dirname "$dst")"
+            ln -sf "$src" "$dst"
+            echo "[QuickLaunch] Symlink : $item → Bottles"
+            linked=1
+        fi
+    done
+    # Game registry: ~/.w101d_wine/system.reg'e Bottles'tan KingsIsle key'leri yoksa ekle
+    if ! grep -qi "KingsIsle" "$DEIMOS_PREFIX/system.reg" 2>/dev/null; then
+        python3 -c "
+import re, os
+bottles_reg = '$WIZ_PREFIX/system.reg'
+deimos_reg  = '$DEIMOS_PREFIX/system.reg'
+try:
+    src = open(bottles_reg, errors='ignore').read()
+    m = re.search(r'(\[Software\\\\\\\\KingsIsle.*?)(?=\n\[|\Z)', src, re.DOTALL|re.I)
+    if m:
+        open(deimos_reg, 'a').write('\n' + m.group(1) + '\n')
+        print('[QuickLaunch] Registry: KingsIsle key aktarıldı')
+except Exception as e:
+    print(f'[QuickLaunch] Registry aktarım atlandı: {e}')
+" 2>/dev/null || true
+    fi
+}
+_setup_game_symlinks
+
+# Artık Homebrew Wine + ~/.w101d_wine kullan
+# WINEPREFIX detect_wine.sh'dan geldi (~/.w101d_wine) — değiştirme
+export WINEPREFIX="$DEIMOS_PREFIX"
 
 echo "[QuickLaunch] Exe     : $WIZ_EXE"
-echo "[QuickLaunch] Prefix  : $WIZ_PREFIX"
+echo "[QuickLaunch] Prefix  : $WINEPREFIX  (Homebrew — Deimos ile aynı wineserver)"
 echo "[QuickLaunch] Wine    : $WINE_BIN"
 
 # Wine binary var mı kontrol et
 if [[ ! -x "$WINE_BIN" ]]; then
-    echo "[QuickLaunch] HATA: Wine binary bulunamadı veya çalıştırılamıyor: $WINE_BIN"
-    echo "  Wizard101.app kurulu mu? /Applications/Wizard101.app var mı?"
+    echo "[QuickLaunch] HATA: Homebrew Wine bulunamadı: $WINE_BIN"
+    echo "  Kurmak için: brew install --cask wine-stable"
     exit 1
 fi
 
