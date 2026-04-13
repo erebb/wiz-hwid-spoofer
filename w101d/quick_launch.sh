@@ -143,17 +143,24 @@ fi
 
 # ── KI Auth: uid + ck2 token al ──────────────────────────────────────────────
 echo "[QuickLaunch] KI sunucusuna bağlanılıyor (ki_auth.py)..."
-AUTH_OUT=$(python3 "$SCRIPT_DIR/ki_auth.py" "$WIZ_USER" "$WIZ_PASS" 2>&1) || {
+# ÖNEMLI: 2>&1 KULLANMA — stderr (log satırları) stdout'a karışır, uid yanlış parse edilir.
+# stderr terminale akar (kullanıcı görür), sadece stdout (uid ck2) yakalanır.
+_AUTH_STDERR=$(mktemp)
+AUTH_OUT=$(python3 "$SCRIPT_DIR/ki_auth.py" "$WIZ_USER" "$WIZ_PASS" 2>"$_AUTH_STDERR")
+_AUTH_EXIT=$?
+cat "$_AUTH_STDERR" >&2   # ki_auth.py log satırlarını terminale yaz
+rm -f "$_AUTH_STDERR"
+if [[ $_AUTH_EXIT -ne 0 ]] || [[ -z "$AUTH_OUT" ]]; then
     echo "[QuickLaunch] HATA: Kimlik doğrulama başarısız!"
-    echo "  $AUTH_OUT"
     echo "  → Kullanıcı adı/şifre doğru mu? İnternet bağlantısı var mı?"
     echo "  → pycryptodome kurulu mu? (pip3 install pycryptodome)"
     exit 1
-}
-WIZ_UID=$(echo "$AUTH_OUT" | awk '{print $1}')
-WIZ_CK2=$(echo "$AUTH_OUT" | awk '{print $2}')
+fi
+# ki_auth.py stdout: "<uid> <ck2_token>" — ck2 boşluk içerebilir, cut -f2- kullan
+WIZ_UID=$(echo "$AUTH_OUT" | cut -d' ' -f1)
+WIZ_CK2=$(echo "$AUTH_OUT" | cut -d' ' -f2-)
 if [[ -z "$WIZ_UID" || -z "$WIZ_CK2" ]]; then
-    echo "[QuickLaunch] HATA: ki_auth.py geçersiz çıktı verdi: $AUTH_OUT"
+    echo "[QuickLaunch] HATA: ki_auth.py geçersiz çıktı: '$AUTH_OUT'"
     exit 1
 fi
 echo "[QuickLaunch] Auth     : OK (uid=$WIZ_UID)"
