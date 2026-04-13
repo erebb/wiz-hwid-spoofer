@@ -58,12 +58,10 @@ fi
 echo "[setup] pip güncelleniyor..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
     -m pip install --quiet --upgrade pip
-WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
-    -m pip install pycryptodome
-WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
-    -m	pip3 install twofish
-WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" 
-    -m pip install pytesseract opencv-python
+
+# ki_auth.py macOS Python'la çalışır → pycryptodome macOS'a kurulur (Wine Python'a değil)
+echo "[setup] macOS Python: pycryptodome kuruluyor (ki_auth.py Twofish için)..."
+pip3 install --quiet pycryptodome 2>/dev/null || pip3 install pycryptodome
 
 
 # ── Deimos reposunu indir ────────────────────
@@ -94,15 +92,43 @@ WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
         "pefile>=2021.5.24" \
         "lark>=1.1.9"
 
-# ── Ekran okuma bağımlılıkları (questing için) ─
-# is_visible_by_path → Pillow (görüntü yükleme) + opencv (template matching)
+# ── Ekran okuma bağımlılıkları (questing için) ─────────────────────────────
+# is_visible_by_path → Pillow + opencv (template matching, pixel karşılaştırma)
+# pytesseract → OCR (bazı quest text okuma işlemleri)
 # Dialogue/combat memory tabanlı çalışır; questing ekran okur → bu paketler gerekli.
-echo "[setup] Ekran okuma paketleri kuruluyor (Pillow, opencv)..."
+echo "[setup] Ekran okuma paketleri kuruluyor (Pillow, opencv, pytesseract)..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
     -m pip install --quiet --prefer-binary \
         "Pillow>=10.0.0" \
         "opencv-python-headless>=4.8.0" \
-        "numpy>=1.26.0"
+        "numpy>=1.26.0" \
+        "pytesseract>=0.3.10"
+
+# pytesseract, tesseract OCR binary'sine ihtiyaç duyar.
+# macOS'ta brew ile kurulup Wine'a köprülenir.
+if ! command -v tesseract &>/dev/null; then
+    echo "[setup] tesseract-ocr kuruluyor (brew)..."
+    brew install tesseract 2>/dev/null || \
+        echo "[setup] UYARI: tesseract kurulamadı. 'brew install tesseract' ile deneyin."
+fi
+# Wine Python'ın tesseract'ı bulabilmesi için PATH'e köprü ekle (pytesseract config)
+_TESS_BIN=$(command -v tesseract 2>/dev/null || echo "")
+if [[ -n "$_TESS_BIN" ]]; then
+    _TESS_CFG="$WINEPREFIX/drive_c/Python313/Lib/site-packages/pytesseract/pytesseract.py"
+    if [[ -f "$_TESS_CFG" ]]; then
+        # pytesseract.pytesseract_cmd'yi macOS tesseract path'ine yönlendir
+        python3 -c "
+import pathlib, re
+f = pathlib.Path('$_TESS_CFG')
+t = f.read_text()
+t2 = re.sub(r\"tesseract_cmd\s*=\s*['\\\"]tesseract['\\\"]\",
+             \"tesseract_cmd = '$_TESS_BIN'\", t)
+if t2 != t:
+    f.write_text(t2)
+    print('[setup] pytesseract → $_TESS_BIN köprüsü kuruldu')
+" 2>/dev/null || true
+    fi
+fi
 
 # PySimpleGUI — Deimos'un kendi wheel'ından (PyPI'dan kaldırıldı)
 echo "[setup] PySimpleGUI kuruluyor (Deimos wheel)..."
