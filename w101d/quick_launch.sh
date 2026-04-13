@@ -101,6 +101,42 @@ if [[ ! -x "$WINE_BIN" ]]; then
     exit 1
 fi
 
+# ── Oyun versiyonunu registry'den oku (AccountClientMismatch önlemek için) ───
+# ki_auth.py de WINEPREFIX'ten okur; bu blok ek bir Wine reg sorgusu ile
+# doğrudan shell'de bulunursa da kullanılabilir.
+if [[ -z "${WIZ_GAME_VERSION:-}" ]]; then
+    _REG_VER=$(
+        grep -i '"Version"' "$WIZ_PREFIX/user.reg" "$WIZ_PREFIX/system.reg" \
+             2>/dev/null \
+        | grep -i "KingsIsle\|Wizard101" \
+        | grep -oP '"Version"="\K[^"]+' \
+        | head -1 || true
+    )
+    # Alternatif: section'a göre ara
+    if [[ -z "$_REG_VER" ]]; then
+        _REG_VER=$(
+            python3 -c "
+import re, sys
+for f in ['$WIZ_PREFIX/user.reg','$WIZ_PREFIX/system.reg']:
+    try:
+        t = open(f, errors='ignore').read()
+        m = re.search(r'\[Software\\\\\\\\KingsIsle Entertainment\\\\\\\\Wizard101[^\]]*\][^\[]*?\"Version\"=\"([^\"]+)\"', t, re.DOTALL|re.I)
+        if m: print(m.group(1)); sys.exit(0)
+    except: pass
+" 2>/dev/null || true
+        )
+    fi
+    if [[ -n "$_REG_VER" ]]; then
+        export WIZ_GAME_VERSION="$_REG_VER"
+        echo "[QuickLaunch] Versiyon : $WIZ_GAME_VERSION"
+    else
+        echo "[QuickLaunch] UYARI: Oyun versiyonu registry'den bulunamadı."
+        echo "  AccountClientMismatch alırsanız:"
+        echo "  export WIZ_GAME_VERSION='V_rXXXXXX.Wizard101_1_XXX'"
+        echo "  Versiyonu bulmak: wine reg query 'HKLM\\SOFTWARE\\KingsIsle Entertainment\\Wizard101'"
+    fi
+fi
+
 # ── KI Auth: uid + ck2 token al ──────────────────────────────────────────────
 echo "[QuickLaunch] KI sunucusuna bağlanılıyor (ki_auth.py)..."
 AUTH_OUT=$(python3 "$SCRIPT_DIR/ki_auth.py" "$WIZ_USER" "$WIZ_PASS" 2>&1) || {

@@ -22,9 +22,16 @@ Oyun başlatma:
 Bağımlılık:
   pip3 install pycryptodome   (Twofish-OFB için)
   VEYA pip3 install twofish
+
+AccountClientMismatch hatası alıyorsanız:
+  KI sunucusu UserAuthenV3'teki Version alanını kontrol eder.
+  WINEPREFIX registry'den otomatik okunur; bulunamazsa:
+  export WIZ_GAME_VERSION='V_rXXXXXX.Wizard101_1_XXX'
 """
 
 import sys
+import os
+import re
 import socket
 import struct
 import hashlib
@@ -60,6 +67,48 @@ def _twofish_ofb_xor(data: bytes, key: bytes, iv: bytes) -> bytes:
         file=sys.stderr,
     )
     sys.exit(1)
+
+
+# ── Oyun versiyonu okuma ─────────────────────────────────────────────────────
+# KI sunucusu UserAuthenV3'teki Version alanını doğrular.
+# AccountClientMismatch hatası: Version boş veya yanlış gönderilince oluşur.
+
+def _read_game_version() -> str:
+    """
+    Oyun versiyonunu şu sırala okur:
+      1. WIZ_GAME_VERSION ortam değişkeni
+      2. WINEPREFIX/user.reg  → [Software\\KingsIsle Entertainment\\Wizard101]
+      3. WINEPREFIX/system.reg
+      4. Boş string (son çare — AccountClientMismatch olabilir)
+    """
+    # 1. Manuel override
+    v = os.environ.get("WIZ_GAME_VERSION", "").strip()
+    if v:
+        return v
+
+    # 2 & 3. WINEPREFIX registry dosyaları
+    wineprefix = os.environ.get("WINEPREFIX", "").strip()
+    if wineprefix:
+        for reg_name in ("user.reg", "system.reg"):
+            reg_path = os.path.join(wineprefix, reg_name)
+            if not os.path.isfile(reg_path):
+                continue
+            try:
+                text = open(reg_path, encoding="utf-8", errors="ignore").read()
+                # Wine registry formatı:
+                #   [Software\\KingsIsle Entertainment\\Wizard101]
+                #   "Version"="V_r717268.Wizard101_1_521"
+                m = re.search(
+                    r'\[Software\\\\KingsIsle Entertainment\\\\Wizard101[^\]]*\]'
+                    r'[^\[]*?"Version"="([^"]+)"',
+                    text, re.DOTALL | re.IGNORECASE,
+                )
+                if m:
+                    return m.group(1)
+            except Exception:
+                pass
+
+    return ""
 
 
 # ── Oturum kripto ─────────────────────────────────────────────────────────────
@@ -233,9 +282,10 @@ def _make_session_accept(sid: int, time_secs: int, time_millis: int) -> bytes:
 #   Rec1 STR, Version STR, Revision STR, DataRevision STR, CRC STR,
 #   MachineID u64, Locale STR, PatchClientID STR, IsSteamPatcher u32, ConsoleType u8
 
-def _build_authen_v3(rec1_bytes: bytes, locale: str = "English") -> bytes:
+def _build_authen_v3(rec1_bytes: bytes, version: str = "",
+                     locale: str = "English") -> bytes:
     p  = _str_encode(rec1_bytes.decode("latin-1"))   # Rec1 (binary → latin-1 string)
-    p += _str_encode("")                              # Version
+    p += _str_encode(version)                         # Version — registry/env'den okunur
     p += _str_encode("")                              # Revision
     p += _str_encode("")                              # DataRevision
     p += _str_encode("")                              # CRC
@@ -301,7 +351,15 @@ def authenticate(
     # --- Faz 2: UserAuthenV3 gönder ---
     ck1     = gen_ck1(password, sid, time_secs, time_millis)
     rec1    = encrypt_rec1(sid, username, ck1, time_secs, time_millis)
-    payload = _build_authen_v3(rec1, "English")
+    version = _read_game_version()
+    if version:
+        print(f"[ki_auth] Oyun versiyonu: {version}", file=sys.stderr)
+    else:
+        print("[ki_auth] UYARI: Oyun versiyonu bulunamadı — AccountClientMismatch olabilir.",
+              file=sys.stderr)
+        print("[ki_auth]   Düzeltmek için: export WIZ_GAME_VERSION='V_rXXXXXX.Wizard101_1_XXX'",
+              file=sys.stderr)
+    payload = _build_authen_v3(rec1, version=version, locale="English")
     _write_frame(sock, False, 0, _dml_encode(SVC_LOGIN, MSG_AUTHEN_V3, payload))
     print("[ki_auth] UserAuthenV3 gönderildi, yanıt bekleniyor...", file=sys.stderr)
 
@@ -321,9 +379,21 @@ def authenticate(
             err, user_id, server_rec1, reason = _parse_authen_rsp(pkt)
             sock.close()
             if err != 0:
+                reason_str = reason or "bilinmeyen hata"
+                if "ClientMismatch" in reason_str or "Mismatch" in reason_str:
+                    hint = (
+                        "\n  → AccountClientMismatch: KI sunucusu oyun versiyonunu reddetti."
+                        "\n  → WINEPREFIX'te kayıt defteri versiyonu okunabildi mi kontrol edin."
+                        "\n  → Manuel düzeltme: quick_launch.sh'a şunu ekleyin:"
+                        "\n     export WIZ_GAME_VERSION='V_rXXXXXX.Wizard101_1_XXX'"
+                        "\n  → Versiyonu bulmak için: wine reg query"
+                        r" 'HKLM\SOFTWARE\KingsIsle Entertainment\Wizard101'"
+                        "\n  → Kullanıcı adı/şifre de yanlış olabilir."
+                    )
+                else:
+                    hint = "\n  → Kullanıcı adı/şifre yanlış olabilir."
                 raise RuntimeError(
-                    f"Auth başarısız (error={err}): {reason or 'bilinmeyen hata'}\n"
-                    "  → Kullanıcı adı/şifre yanlış olabilir."
+                    f"Auth başarısız (error={err}): {reason_str}{hint}"
                 )
             ck2 = decrypt_rec1(server_rec1.encode("latin-1"), sid, time_secs, time_millis)
             print(f"[ki_auth] Kimlik doğrulandı — UserID: {user_id}", file=sys.stderr)
