@@ -16,6 +16,7 @@ Kullanım:
 """
 
 import os
+import ssl
 import sys
 import time
 import pathlib
@@ -25,41 +26,49 @@ import urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
-# ── Ayarlar ──────────────────────────────────────────────────────────────────
-PATCH_HOST      = "versionak.us.wizard101.com"
-PATCH_HOST_ALT  = "patch.us.wizard101.com"
+# SSL sertifika doğrulamasını devre dışı bırakan context.
+# versionak.us.wizard101.com'un sertifikası hostname mismatch veriyor
+# (cert *.wizard101.com içeren başka bir alan için geçerli) ama HTTPS çalışıyor.
+_SSL_NO_VERIFY = ssl.create_default_context()
+_SSL_NO_VERIFY.check_hostname = False
+_SSL_NO_VERIFY.verify_mode    = ssl.CERT_NONE
 
-# Tüm bilinen yollar sırasıyla denenir.
-# 404 → path yanlış, 403 → scheme/User-Agent sorunu, 200 → başarılı.
-_CANDIDATE_FILE_LIST_URLS = [
-    # Ana sunucu — farklı path varyantları
-    f"http://{PATCH_HOST}/Windows/LatestFileList.bin",
-    f"http://{PATCH_HOST}/LatestBuild/Windows/LatestFileList.bin",
-    f"http://{PATCH_HOST}/LatestBuild/Data/GameData/LatestFileList.bin",
-    f"http://{PATCH_HOST}/LatestFileList.bin",
-    # HTTPS varyantları
-    f"https://{PATCH_HOST}/Windows/LatestFileList.bin",
-    f"https://{PATCH_HOST}/LatestBuild/Windows/LatestFileList.bin",
-    f"https://{PATCH_HOST}/LatestBuild/Data/GameData/LatestFileList.bin",
-    # Alternatif host
-    f"http://{PATCH_HOST_ALT}/Windows/LatestFileList.bin",
-    f"http://{PATCH_HOST_ALT}/LatestBuild/Windows/LatestFileList.bin",
-    f"https://{PATCH_HOST_ALT}/Windows/LatestFileList.bin",
+# ── Ayarlar ──────────────────────────────────────────────────────────────────
+PATCH_HOST = "versionak.us.wizard101.com"
+
+# Her (url, user_agent) çifti sırasıyla denenir.
+# HTTPS + SSL bypass en çok umudu olan kombinasyon:
+#   - versionak.us.wizard101.com HTTPS sunuyor ama sertifika hostname mismatch
+#   - _SSL_NO_VERIFY ile bağlanınca 403 yerine 200 gelebilir
+# HTTP 403 alıyorsa User-Agent filtrelemesi var → farklı UA'lar deneniyor.
+_FILE_LIST_CANDIDATES = [
+    # HTTPS + SSL bypass (en umut verici)
+    (f"https://{PATCH_HOST}/Windows/LatestFileList.bin",              "KingsIsle Update Agent"),
+    (f"https://{PATCH_HOST}/Windows/LatestFileList.bin",              "KingsIsle Patcher"),
+    (f"https://{PATCH_HOST}/Windows/LatestFileList.bin",              "Mozilla/5.0"),
+    (f"https://{PATCH_HOST}/LatestBuild/Windows/LatestFileList.bin",  "KingsIsle Update Agent"),
+    (f"https://{PATCH_HOST}/LatestBuild/Data/GameData/LatestFileList.bin", "KingsIsle Update Agent"),
+    # HTTP — farklı UA kombinasyonları
+    (f"http://{PATCH_HOST}/Windows/LatestFileList.bin",               "KingsIsle Update Agent"),
+    (f"http://{PATCH_HOST}/Windows/LatestFileList.bin",               "KingsIsle Patcher"),
+    (f"http://{PATCH_HOST}/Windows/LatestFileList.bin",               "Mozilla/5.0"),
+    (f"http://{PATCH_HOST}/LatestBuild/Windows/LatestFileList.bin",   "KingsIsle Update Agent"),
+    (f"http://{PATCH_HOST}/LatestFileList.bin",                       "KingsIsle Update Agent"),
 ]
+
 _CANDIDATE_DOWNLOAD_BASES = [
-    f"http://{PATCH_HOST}/LatestBuild/Data/GameData/",
     f"https://{PATCH_HOST}/LatestBuild/Data/GameData/",
-    f"http://{PATCH_HOST_ALT}/LatestBuild/Data/GameData/",
+    f"http://{PATCH_HOST}/LatestBuild/Data/GameData/",
 ]
 
 # Çalışma zamanında seçilen URL'ler (fetch_file_list() sonrası belirlenir)
-FILE_LIST_URL: str = _CANDIDATE_FILE_LIST_URLS[0]
+FILE_LIST_URL: str = _FILE_LIST_CANDIDATES[0][0]
 DOWNLOAD_BASE: str = _CANDIDATE_DOWNLOAD_BASES[0]
 
-# KingsIsle launcher'ına benzeterek 403'ten kaçın
+# Varsayılan istek başlıkları (fetch_file_list() kendi UA'sını override eder)
 _HEADERS = {
-    "User-Agent": "KingsIsle Patcher",
-    "Accept": "*/*",
+    "User-Agent": "KingsIsle Update Agent",
+    "Accept":     "*/*",
 }
 
 # Dosya listesinde yer almayan ama gerekli dosyalar (AdditionalFiles.txt'ten)
@@ -113,26 +122,43 @@ def find_game_data_dir() -> Optional[pathlib.Path]:
 # ── Dosya listesi indirme ─────────────────────────────────────────────────────
 def fetch_file_list() -> bytes:
     """
-    LatestFileList.bin'i aday URL'lerden sırasıyla dener.
-    Başarılı olan URL'e göre DOWNLOAD_BASE'i de günceller.
+    LatestFileList.bin'i (_url, user_agent) aday listesinden sırasıyla dener.
+
+    HTTPS → SSL sertifika doğrulaması devre dışı (_SSL_NO_VERIFY):
+      versionak.us.wizard101.com sertifikası hostname mismatch veriyor
+      ama sunucu HTTPS üzerinde çalışıyor. verify=False ile bağlanınca çalışabilir.
+
+    HTTP 403 → User-Agent filtrelemesi; birden fazla UA deneniyor.
     """
     global FILE_LIST_URL, DOWNLOAD_BASE
 
     last_err: Exception = Exception("Hiç URL denenmedi")
 
-    for fl_url in _CANDIDATE_FILE_LIST_URLS:
+    for fl_url, ua in _FILE_LIST_CANDIDATES:
+        scheme = fl_url.split("://")[0]
+        host   = fl_url.split("://")[1].split("/")[0]
+        ctx    = _SSL_NO_VERIFY if scheme == "https" else None
+        headers = {"User-Agent": ua, "Accept": "*/*"}
         try:
-            print(f"[setup] Deneniyor: {fl_url}")
-            req = urllib.request.Request(fl_url, headers=_HEADERS)
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            print(f"[setup] Deneniyor [{ua}]: {fl_url}")
+            req = urllib.request.Request(fl_url, headers=headers)
+            kwargs = {"timeout": 20}
+            if ctx:
+                kwargs["context"] = ctx  # type: ignore[assignment]
+            with urllib.request.urlopen(req, **kwargs) as resp:  # type: ignore[arg-type]
                 data = resp.read()
+
+            if len(data) < 64:
+                # Çok küçük cevap → muhtemelen hata sayfası
+                print(f"[setup]   Çok küçük cevap ({len(data)} byte), atlanıyor.")
+                continue
+
             FILE_LIST_URL = fl_url
-            # Aynı host+scheme'i download base için de kullan
-            scheme = fl_url.split("://")[0]
-            host   = fl_url.split("://")[1].split("/")[0]
             DOWNLOAD_BASE = f"{scheme}://{host}/LatestBuild/Data/GameData/"
             print(f"[setup] Başarılı → {fl_url}  ({len(data):,} byte)")
+            print(f"[setup] User-Agent: {ua}  |  Scheme: {scheme.upper()}")
             return data
+
         except urllib.error.HTTPError as e:
             print(f"[setup]   HTTP {e.code} → {fl_url}")
             last_err = e
@@ -144,8 +170,15 @@ def fetch_file_list() -> bytes:
             last_err = e
 
     print()
-    print("[setup] HATA: Hiçbir URL çalışmadı. Yukarıdaki HTTP kodlarını kontrol edin.")
-    print("[setup] 404 → path yanlış, 403 → sunucu reddetti, bağlantı hatası → DNS/ağ sorunu")
+    print("[setup] ══════════════════════════════════════════════════════")
+    print("[setup] HATA: Hiçbir URL/protokol kombinasyonu çalışmadı.")
+    print("[setup]")
+    print("[setup] Çözüm önerileri:")
+    print("[setup]   1. Oyunun kendi launcher'ı (Wizard101.app) üzerinden")
+    print("[setup]      bir kez açın → oyun dosyaları streaming ile iner.")
+    print("[setup]   2. VPN kullanıyorsanız kapatıp tekrar deneyin.")
+    print("[setup]   3. İnternet bağlantısını kontrol edin.")
+    print("[setup] ══════════════════════════════════════════════════════")
     raise last_err
 
 
@@ -214,7 +247,9 @@ def download_one(filename: str, dest: pathlib.Path, idx: int, total: int) -> tup
             if existing > 0:
                 req.add_header("Range", f"bytes={existing}-")
 
-            with urllib.request.urlopen(req, timeout=120) as resp:
+            # HTTPS kullanılıyorsa SSL sertifika doğrulamasını atla
+            _ctx = _SSL_NO_VERIFY if url.startswith("https://") else None
+            with urllib.request.urlopen(req, timeout=120, **({"context": _ctx} if _ctx else {})) as resp:
                 status = resp.status  # type: ignore[attr-defined]
 
                 # 416 = sunucu "zaten sende var" diyor → rename et
