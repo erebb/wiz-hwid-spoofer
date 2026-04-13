@@ -15,6 +15,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WIZ_USER="KULLANICI_ADIN"
 WIZ_PASS="SIFREN"
 
+# Steam hesabı: 1 olarak ayarla (normal KI hesabı için 0)
+# AccountClientMismatch alıyorsanız bu değeri değiştirin.
+export WIZ_IS_STEAM=1
+
 # ── Oyun exe'sini otomatik bul ────────────────────────────────────────────────
 _find_wiz_exe() {
     local candidates=(
@@ -153,6 +157,19 @@ if [[ -z "$WIZ_UID" || -z "$WIZ_CK2" ]]; then
     exit 1
 fi
 echo "[QuickLaunch] Auth     : OK (uid=$WIZ_UID)"
+
+# ── BaseMessages.wad varlık kontrolü ─────────────────────────────────────────
+# Oyun bu dosyayı bulamazsa: "LoadMessageModule BaseMessages" crash'i verir.
+# Normal launcher (Wizard101.app) eksik dosyaları patch server'dan indirir.
+_WIZ_DATA="$WIZ_PREFIX/drive_c/ProgramData/KingsIsle Entertainment/Wizard101/Data/GameData"
+if [[ ! -f "$_WIZ_DATA/BaseMessages.wad" ]]; then
+    echo ""
+    echo "[QuickLaunch] UYARI: BaseMessages.wad bulunamadı: $_WIZ_DATA"
+    echo "  → Oyunu bir kez Wizard101.app üzerinden başlatıp tam patch'in inmesini bekleyin."
+    echo "  → Sonra bu scripti tekrar çalıştırın."
+    echo "  (Devam ediliyor — crash olabilir)"
+    echo ""
+fi
 
 echo "[QuickLaunch] Oyun başlatılıyor..."
 echo "[QuickLaunch] (İlk 10 saniye Wine çıktısı aşağıda görünür — normal)"

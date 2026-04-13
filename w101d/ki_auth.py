@@ -283,7 +283,7 @@ def _make_session_accept(sid: int, time_secs: int, time_millis: int) -> bytes:
 #   MachineID u64, Locale STR, PatchClientID STR, IsSteamPatcher u32, ConsoleType u8
 
 def _build_authen_v3(rec1_bytes: bytes, version: str = "",
-                     locale: str = "English") -> bytes:
+                     locale: str = "English", is_steam: bool = False) -> bytes:
     p  = _str_encode(rec1_bytes.decode("latin-1"))   # Rec1 (binary → latin-1 string)
     p += _str_encode(version)                         # Version — registry/env'den okunur
     p += _str_encode("")                              # Revision
@@ -292,7 +292,9 @@ def _build_authen_v3(rec1_bytes: bytes, version: str = "",
     p += struct.pack("<Q", 0)                         # MachineID
     p += _str_encode(locale)                          # Locale
     p += _str_encode("")                              # PatchClientID
-    p += struct.pack("<I", 0)                         # IsSteamPatcher
+    # IsSteamPatcher: Steam hesabı için 1, normal KI hesabı için 0
+    # WIZ_IS_STEAM=1 ile kontrol edilir (quick_launch.sh veya env)
+    p += struct.pack("<I", 1 if is_steam else 0)
     p += struct.pack("<B", 0)                         # ConsoleType
     return p
 
@@ -350,8 +352,9 @@ def authenticate(
 
     # --- Faz 2: UserAuthenV3 gönder ---
     ck1     = gen_ck1(password, sid, time_secs, time_millis)
-    rec1    = encrypt_rec1(sid, username, ck1, time_secs, time_millis)
-    version = _read_game_version()
+    rec1     = encrypt_rec1(sid, username, ck1, time_secs, time_millis)
+    version  = _read_game_version()
+    is_steam = os.environ.get("WIZ_IS_STEAM", "0").strip() in ("1", "true", "yes")
     if version:
         print(f"[ki_auth] Oyun versiyonu: {version}", file=sys.stderr)
     else:
@@ -359,7 +362,9 @@ def authenticate(
               file=sys.stderr)
         print("[ki_auth]   Düzeltmek için: export WIZ_GAME_VERSION='V_rXXXXXX.Wizard101_1_XXX'",
               file=sys.stderr)
-    payload = _build_authen_v3(rec1, version=version, locale="English")
+    if is_steam:
+        print("[ki_auth] Mod: Steam hesabı (IsSteamPatcher=1)", file=sys.stderr)
+    payload = _build_authen_v3(rec1, version=version, locale="English", is_steam=is_steam)
     _write_frame(sock, False, 0, _dml_encode(SVC_LOGIN, MSG_AUTHEN_V3, payload))
     print("[ki_auth] UserAuthenV3 gönderildi, yanıt bekleniyor...", file=sys.stderr)
 
