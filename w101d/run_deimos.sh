@@ -32,19 +32,7 @@ if [[ "$MODE" == "deimos" && ! -f "$DEIMOS_DIR/Deimos.py" ]]; then
     exit 1
 fi
 
-# ── Deimos.py: bizim repodan kopyala ─────────────────────────────────────────
-# w101d/Deimos.py (erebb/wiz-hwid-spoofer) → ~/.w101d_cache/Deimos/Deimos.py
-# Deimos reposunun kendi Deimos.py'sinin üzerine yazar.
-_REPO_DEIMOS="$SCRIPT_DIR/Deimos.py"
-_CACHE_DEIMOS="$DEIMOS_DIR/Deimos.py"
-if [[ -f "$_REPO_DEIMOS" ]]; then
-    if ! diff -q "$_REPO_DEIMOS" "$_CACHE_DEIMOS" &>/dev/null; then
-        cp "$_REPO_DEIMOS" "$_CACHE_DEIMOS"
-        echo "[run] Deimos.py güncellendi (erebb/wiz-hwid-spoofer)"
-    fi
-else
-    echo "[run] UYARI: w101d/Deimos.py bulunamadı, Deimos repo'sunun kopyası kullanılıyor."
-fi
+# Deimos.py: get_deimos.sh çalıştırılınca güncellenir (otomatik değil).
 
 # ── Wizard101 exe'sini dosya sisteminden bul (preloader imzalamak için) ───────
 _find_wiz_exe() {
