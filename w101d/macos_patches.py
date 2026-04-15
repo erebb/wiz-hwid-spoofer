@@ -6,6 +6,8 @@ Python başladığında otomatik çalışır — Deimos.py'e dokunmadan yamalar 
 
 Yamalar:
   1. Wad.from_game_data  → WIZ_DATA_DIR env üzerinden macOS game data yolu
+  2. PIL.ImageGrab.grab  → mss (CoreGraphics) ile değiştirilir
+                           DXVK/Metal render → GDI siyah döndürür, mss çalışır
 """
 
 import os
@@ -47,3 +49,40 @@ def _apply_wad_patch():
 
 
 _apply_wad_patch()
+
+
+# ── 2. PIL.ImageGrab → mss (CoreGraphics) yaması ────────────────────────────
+# DXVK/Metal render altında Wine GDI ekran yakalama siyah döndürür.
+# mss, macOS CoreGraphics API'sini kullanır → DXVK ile çalışır.
+# Deimos autoquest is_visible_by_path() bu patch sayesinde doğru ekran alır.
+def _apply_imagegrab_mss_patch():
+    try:
+        import mss as _mss_lib
+        from PIL import ImageGrab as _ig, Image as _Image
+
+        if getattr(_ig.grab, "_mss_patched", False):
+            return  # zaten uygulandı
+
+        def _mss_grab(bbox=None, include_layered_windows=False, all_screens=False, xdisplay=None):
+            with _mss_lib.mss() as sct:
+                if bbox is not None:
+                    mon = {
+                        "left":   int(bbox[0]),
+                        "top":    int(bbox[1]),
+                        "width":  int(bbox[2] - bbox[0]),
+                        "height": int(bbox[3] - bbox[1]),
+                    }
+                else:
+                    # Tüm ekran (birden fazla monitör varsa hepsini kapsar)
+                    mon = sct.monitors[0]
+                raw = sct.grab(mon)
+                # mss BGRA döndürür → RGB'ye çevir
+                return _Image.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
+
+        _mss_grab._mss_patched = True
+        _ig.grab = _mss_grab
+    except Exception:
+        pass  # mss kurulu değilse sessizce geç (pip install mss ile kurulabilir)
+
+
+_apply_imagegrab_mss_patch()

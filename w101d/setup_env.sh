@@ -96,13 +96,14 @@ WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
 # is_visible_by_path → Pillow + opencv (template matching, pixel karşılaştırma)
 # pytesseract → OCR (bazı quest text okuma işlemleri)
 # Dialogue/combat memory tabanlı çalışır; questing ekran okur → bu paketler gerekli.
-echo "[setup] Ekran okuma paketleri kuruluyor (Pillow, opencv, pytesseract)..."
+echo "[setup] Ekran okuma paketleri kuruluyor (Pillow, opencv, pytesseract, mss)..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
     -m pip install --quiet --prefer-binary \
         "Pillow>=10.0.0" \
         "opencv-python-headless>=4.8.0" \
         "numpy>=1.26.0" \
-        "pytesseract>=0.3.10"
+        "pytesseract>=0.3.10" \
+        "mss>=9.0.1"
 
 # pytesseract, tesseract OCR binary'sine ihtiyaç duyar.
 # macOS'ta brew ile kurulup Wine'a köprülenir.
