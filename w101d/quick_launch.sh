@@ -156,7 +156,7 @@ if [[ -z "${WIZ_GAME_VERSION:-}" ]]; then
         grep -i '"Version"' "$WIZ_PREFIX/user.reg" "$WIZ_PREFIX/system.reg" \
              2>/dev/null \
         | grep -i "KingsIsle\|Wizard101" \
-        | grep -oP '"Version"="\K[^"]+' \
+        | sed 's/.*"Version"="\([^"]*\)".*/\1/' \
         | head -1 || true
     )
     # Alternatif: section'a göre ara
