@@ -76,37 +76,54 @@ else:
 # 5. HP/MANA MEMORY CRASH BYPASS (YENİ - Can okuma hatasını yoksayar)
 from wizwalker.memory.memory_objects.game_stats import GameStats
 
+_IMMORTAL_HP   = 100000
+_IMMORTAL_MANA = 100000
+_IMMORTAL_LVL  = 100
+
 _orig_max_mana = GameStats.max_mana
 async def _safe_max_mana(self):
     try: return await _orig_max_mana(self)
-    except Exception as e: logger.debug(f"[macOS] max_mana okunamadı ({e}), 100 dönüyor"); return 100
+    except Exception as e: logger.debug(f"[macOS] max_mana okunamadı ({e}), {_IMMORTAL_MANA} dönüyor"); return _IMMORTAL_MANA
 GameStats.max_mana = _safe_max_mana
 
 _orig_cur_mana = GameStats.current_mana
 async def _safe_cur_mana(self):
     try: return await _orig_cur_mana(self)
-    except Exception as e: logger.debug(f"[macOS] current_mana okunamadı ({e}), 100 dönüyor"); return 100
+    except Exception as e: logger.debug(f"[macOS] current_mana okunamadı ({e}), {_IMMORTAL_MANA} dönüyor"); return _IMMORTAL_MANA
 GameStats.current_mana = _safe_cur_mana
 
 _orig_max_hp = GameStats.max_hitpoints
 async def _safe_max_hp(self):
     try: return await _orig_max_hp(self)
-    except Exception as e: logger.debug(f"[macOS] max_hitpoints okunamadı ({e}), 1000 dönüyor"); return 1000
+    except Exception as e: logger.debug(f"[macOS] max_hitpoints okunamadı ({e}), {_IMMORTAL_HP} dönüyor"); return _IMMORTAL_HP
 GameStats.max_hitpoints = _safe_max_hp
 
 _orig_cur_hp = GameStats.current_hitpoints
 async def _safe_cur_hp(self):
     try: return await _orig_cur_hp(self)
-    except Exception as e: logger.debug(f"[macOS] current_hitpoints okunamadı ({e}), 1000 dönüyor"); return 1000
+    except Exception as e: logger.debug(f"[macOS] current_hitpoints okunamadı ({e}), {_IMMORTAL_HP} dönüyor"); return _IMMORTAL_HP
 GameStats.current_hitpoints = _safe_cur_hp
 
 _orig_ref_level = GameStats.reference_level
 async def _safe_ref_level(self):
     try: return await _orig_ref_level(self)
-    except Exception as e: logger.debug(f"[macOS] reference_level okunamadı ({e}), 100 dönüyor"); return 100
+    except Exception as e: logger.debug(f"[macOS] reference_level okunamadı ({e}), {_IMMORTAL_LVL} dönüyor"); return _IMMORTAL_LVL
 GameStats.reference_level = _safe_ref_level
 
-logger.info("[macOS] Tüm yamalar uygulandı (WAD, traversalData, mss, tesseract, HP/mana bypass)")
+# 6. NAVMAP_TP INSTANT PATCH (wait_on_inuse=False — odaklanmamış pencerede de çalışır)
+from src import teleport_math as _tmath
+_orig_navmap_tp = _tmath.navmap_tp
+
+async def _instant_navmap_tp(client, xyz):
+    try:
+        await client.teleport(xyz, wait_on_inuse=False)
+        logger.debug(f"[macOS] instant_tp OK (no wait): {xyz}")
+    except Exception as _e:
+        logger.warning(f"[macOS] instant_tp HATA ({_e}), orijinal navmap_tp deneniyor...")
+        await _orig_navmap_tp(client, xyz)
+
+_tmath.navmap_tp = _instant_navmap_tp
+logger.info("[macOS] Tüm yamalar uygulandı (WAD, traversalData, mss, tesseract, HP/mana bypass, instant_tp)")
 
 # =====================================================================
 
