@@ -11,7 +11,7 @@ from loguru import logger
 import wizwalker.extensions.wizsprinter.wiz_navigator as wn
 
 # =====================================================================
-# --- [DEIMOS MAC/WINE ULTIMATE FIX - TÜM YAMALAR VE KALKANLAR] ---
+# --- [DEIMOS MAC/WINE ULTIMATE FIX - İZ SÜRÜCÜ (TRACE) SÜRÜM] ---
 # =====================================================================
 
 # 1. WAD Dosya Okuma Yaması
@@ -19,9 +19,7 @@ _wad_orig = wizwalker.file_readers.wad.Wad.from_game_data
 def _patched_from_game_data(cls, name, *args, **kwargs):
     local_path = os.path.join(os.getcwd(), f"{name}.wad")
     if os.path.exists(local_path):
-        logger.debug(f"[macOS] WAD bulundu (yerel): {local_path}")
         return cls(local_path)
-    logger.debug(f"[macOS] WAD yerel bulunamadı, orijinal yol deneniyor: {name}.wad")
     return _wad_orig.__func__(cls, name, *args, **kwargs)
 wizwalker.file_readers.wad.Wad.from_game_data = classmethod(_patched_from_game_data)
 
@@ -32,34 +30,8 @@ if not os.path.exists(traversal_folder):
     os.makedirs(traversal_folder)
 wn.DATA_DIRECTORY = pathlib.Path(traversal_folder)
 os.environ["WIZSPRINTER_DATA_PATH"] = traversal_folder
-logger.debug(f"[macOS] traversalData dizini: {traversal_folder}")
 
-# 3. MSS ile Ekran Yakalama (Wine+DXVK'da PIL ImageGrab siyah döndürür)
-try:
-    import mss as _mss_lib
-    from PIL import Image as _PILImage, ImageGrab as _ImageGrab
-    _sct = _mss_lib.mss()
-    def _mss_grab(bbox=None, *args, **kwargs):
-        if bbox:
-            mon = {"left": int(bbox[0]), "top": int(bbox[1]), "width": int(bbox[2]-bbox[0]), "height": int(bbox[3]-bbox[1])}
-            logger.debug(f"[macOS] mss ekran yakalama: bbox={bbox} mon={mon}")
-        else:
-            mon = _sct.monitors[0]
-            logger.debug(f"[macOS] mss ekran yakalama: tam ekran mon={mon}")
-        try:
-            raw = _sct.grab(mon)
-            img = _PILImage.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
-            logger.debug(f"[macOS] mss grab OK: boyut={raw.size}")
-            return img
-        except Exception as _grab_err:
-            logger.warning(f"[macOS] mss grab HATA ({_grab_err}), boş görüntü dönüyor")
-            return _PILImage.new("RGB", (mon.get("width", 1), mon.get("height", 1)))
-    _ImageGrab.grab = _mss_grab
-    logger.debug("[macOS] mss ekran yakalama aktif (PIL ImageGrab override edildi)")
-except Exception as e:
-    logger.warning(f"[macOS] mss yüklenemedi, PIL ImageGrab kullanılıyor (siyah olabilir): {e}")
-
-# 4. TESSERACT MAC-NATIVE YAMASI 
+# 3. TESSERACT MAC-NATIVE VE İZ TAKİP YAMASI 
 import pytesseract
 mac_silicon_path = r"Z:\opt\homebrew\bin\tesseract"
 mac_intel_path = r"Z:\usr\local\bin\tesseract"
@@ -73,73 +45,77 @@ elif os.path.exists(mac_intel_path):
 else:
     pytesseract.pytesseract.tesseract_cmd = 'tesseract'
 
-# 5. HP/MANA MEMORY CRASH BYPASS (YENİ - Can okuma hatasını yoksayar)
+if not hasattr(pytesseract, "_orig_image_to_string"):
+    pytesseract._orig_image_to_string = pytesseract.image_to_string
+    def _safe_image_to_string(*args, **kwargs):
+        try:
+            logger.debug("[TESSERACT] OCR Ekran okuması başlatıldı...")
+            res = pytesseract._orig_image_to_string(*args, **kwargs)
+            logger.debug(f"[TESSERACT] OCR Başarılı! Okunan uzunluk: {len(res)}")
+            return res
+        except Exception as e:
+            logger.error(f"[TESSERACT] ÇÖKTÜ: {e}")
+            return ""
+    pytesseract.image_to_string = _safe_image_to_string
+
+# 4. EVRENSEL HAFIZA KALKANI (Tüm okuma hatalarını kökten engeller)
 from wizwalker.memory.memory_objects.game_stats import GameStats
 
-_IMMORTAL_HP   = 100000
-_IMMORTAL_MANA = 100000
-_IMMORTAL_LVL  = 100
+if not hasattr(GameStats, "_orig_read_value_from_offset"):
+    GameStats._orig_read_value_from_offset = GameStats.read_value_from_offset
+    async def _universal_safe_read(self, offset, data_type, *args, **kwargs):
+        try:
+            return await self._orig_read_value_from_offset(offset, data_type, *args, **kwargs)
+        except Exception:
+            return 1000 
+    GameStats.read_value_from_offset = _universal_safe_read
 
-_orig_max_mana = GameStats.max_mana
-async def _safe_max_mana(self):
-    try: return await _orig_max_mana(self)
-    except Exception as e: logger.debug(f"[macOS] max_mana okunamadı ({e}), {_IMMORTAL_MANA} dönüyor"); return _IMMORTAL_MANA
-GameStats.max_mana = _safe_max_mana
+# 5. MAC AUTO POTION (SAVAŞ SAYACI DESTEKLİ)
+import src.utils
+import src.sigil
+import src.questing
 
-_orig_cur_mana = GameStats.current_mana
-async def _safe_cur_mana(self):
-    try: return await _orig_cur_mana(self)
-    except Exception as e: logger.debug(f"[macOS] current_mana okunamadı ({e}), {_IMMORTAL_MANA} dönüyor"); return _IMMORTAL_MANA
-GameStats.current_mana = _safe_cur_mana
+_orig_is_potion_needed = src.utils.is_potion_needed
+_orig_auto_potions = src.utils.auto_potions
+_orig_auto_potions_force_buy = src.utils.auto_potions_force_buy
 
-_orig_max_hp = GameStats.max_hitpoints
-async def _safe_max_hp(self):
-    try: return await _orig_max_hp(self)
-    except Exception as e: logger.debug(f"[macOS] max_hitpoints okunamadı ({e}), {_IMMORTAL_HP} dönüyor"); return _IMMORTAL_HP
-GameStats.max_hitpoints = _safe_max_hp
+async def mac_is_potion_needed(client):
+    count = getattr(client, "mac_battle_count", 0)
+    if count >= 3:
+        return True
+    return False
 
-_orig_cur_hp = GameStats.current_hitpoints
-async def _safe_cur_hp(self):
-    try: return await _orig_cur_hp(self)
-    except Exception as e: logger.debug(f"[macOS] current_hitpoints okunamadı ({e}), {_IMMORTAL_HP} dönüyor"); return _IMMORTAL_HP
-GameStats.current_hitpoints = _safe_cur_hp
-
-_orig_ref_level = GameStats.reference_level
-async def _safe_ref_level(self):
-    try: return await _orig_ref_level(self)
-    except Exception as e: logger.debug(f"[macOS] reference_level okunamadı ({e}), {_IMMORTAL_LVL} dönüyor"); return _IMMORTAL_LVL
-GameStats.reference_level = _safe_ref_level
-
-# 6. WIZWALKER IS_FREE / WAIT_FOR_FREE BYPASS (macOS — should_update timeout)
-import wizwalker.utils as _ww_utils
-from wizwalker.client import Client as _WClient
-
-async def _is_free_always(client):
-    return True
-
-_ww_utils.is_free = _is_free_always
-
-_orig_wait_for_free = _WClient.wait_for_free if hasattr(_WClient, 'wait_for_free') else None
-if _orig_wait_for_free:
-    async def _wait_for_free_instant(self, *args, **kwargs):
-        return
-    _WClient.wait_for_free = _wait_for_free_instant
-    logger.debug("[macOS] wait_for_free bypass aktif")
-
-# 7. NAVMAP_TP INSTANT PATCH (wait_on_inuse=False — odaklanmamış pencerede de çalışır)
-from src import teleport_math as _tmath
-_orig_navmap_tp = _tmath.navmap_tp
-
-async def _instant_navmap_tp(client, xyz):
+async def mac_auto_potions(client, buy=None):
+    if buy is None:
+        buy = getattr(client, "buy_potions", True)
+    logger.info(f"{client.title} - Otomatik İksir Molası (Quest/Sigil)! Konuma MARK atılıyor...")
     try:
-        await client.teleport(xyz, wait_on_inuse=False)
-        logger.debug(f"[macOS] instant_tp OK (no wait): {xyz}")
-    except Exception as _e:
-        logger.warning(f"[macOS] instant_tp HATA ({_e}), orijinal navmap_tp deneniyor...")
-        await _orig_navmap_tp(client, xyz)
+        await _orig_auto_potions(client, buy=buy)
+    except Exception as e:
+        logger.debug(f"{client.title} - Mac Auto Potion (Bypass) devrede. Hata atlandı.")
+    logger.success(f"{client.title} - İksir işlemi tamamlandı! Mark noktasına geri dönüldü.")
+    client.mac_battle_count = 0
 
-_tmath.navmap_tp = _instant_navmap_tp
-logger.info("[macOS] Tüm yamalar uygulandı (WAD, traversalData, mss, tesseract, HP/mana, is_free, instant_tp)")
+async def mac_auto_potions_force_buy(client, buy=True):
+    logger.info(f"{client.title} - Zorunlu İksir Alımı (Refill) Başlatıldı! Mark atılıyor...")
+    try:
+        await _orig_auto_potions_force_buy(client, buy)
+    except Exception as e:
+        logger.debug(f"{client.title} - Mac Force Buy (Bypass) devrede. Hata atlandı.")
+    logger.success(f"{client.title} - Refill Potions işlemi bitti. Eski konuma dönüldü.")
+    client.mac_battle_count = 0
+
+src.utils.is_potion_needed = mac_is_potion_needed
+src.utils.auto_potions = mac_auto_potions
+src.utils.auto_potions_force_buy = mac_auto_potions_force_buy
+
+if hasattr(src.sigil, "is_potion_needed"): src.sigil.is_potion_needed = mac_is_potion_needed
+if hasattr(src.sigil, "auto_potions"): src.sigil.auto_potions = mac_auto_potions
+if hasattr(src.sigil, "auto_potions_force_buy"): src.sigil.auto_potions_force_buy = mac_auto_potions_force_buy
+
+if hasattr(src.questing, "is_potion_needed"): src.questing.is_potion_needed = mac_is_potion_needed
+if hasattr(src.questing, "auto_potions"): src.questing.auto_potions = mac_auto_potions
+if hasattr(src.questing, "auto_potions_force_buy"): src.questing.auto_potions_force_buy = mac_auto_potions_force_buy
 
 # =====================================================================
 
@@ -160,11 +136,12 @@ import statistics
 import re
 from src.command_parser import execute_flythrough, parse_command
 from src.auto_pet import nomnom
+from src.drop_logger import logging_loop
 from src.stat_viewer import total_stats
 from src.teleport_math import navmap_tp, calc_Distance
 from src.questing import Quester
 from src.sigil import Sigil
-from src.utils import index_with_str, is_visible_by_path, is_free, auto_potions, auto_potions_force_buy, to_world, collect_wisps_with_limit, try_task_coro, read_webpage, override_wiz_install_using_handle
+from src.utils import index_with_str, is_visible_by_path, is_free, to_world, collect_wisps_with_limit, try_task_coro, read_webpage, override_wiz_install_using_handle
 from src.paths import advance_dialog_path, decline_quest_path, play_button_path
 import PySimpleGUI as gui
 import pyperclip
@@ -230,9 +207,12 @@ parser = ConfigParser()
 def read_config(config_name : str):
 	parser.read(config_name)
 
-	global speed_multiplier, use_potions
+	global speed_multiplier, use_potions, rpc_status, drop_status, anti_afk_status
 	speed_multiplier = parser.getfloat('settings', 'speed_multiplier', fallback=5.0)
 	use_potions = parser.getboolean('settings', 'use_potions', fallback=True)
+	rpc_status = parser.getboolean('settings', 'rich_presence', fallback=True)
+	drop_status = parser.getboolean('settings', 'drop_logging', fallback=True)
+	anti_afk_status = parser.getboolean('settings', 'use_anti_afk', fallback=True)
 
 	global x_press_key, sync_locations_key, quest_teleport_key, mass_quest_teleport_key, toggle_speed_key, friend_teleport_key, kill_tool_key, toggle_auto_combat_key, toggle_auto_dialogue_key, toggle_auto_sigil_key, toggle_freecam_key, toggle_auto_questing_key
 	x_press_key = parser.get('hotkeys', 'x_press', fallback='X')
@@ -458,18 +438,8 @@ async def xyz_sync(foreground_client : Client, background_clients : list[Client]
 async def navmap_teleport(foreground_client : wizwalker.Client, background_clients : list[Client], mass_teleport: bool = False, debug : bool = False, xyz: XYZ = None):
 	async def client_navmap_teleport(client: Client, xyz: XYZ = None):
 		if not xyz:
-			try:
-				xyz = await client.quest_position.position()
-				logger.debug(f"[questing] {client.title} quest pozisyonu: {xyz}")
-			except Exception as _qp_err:
-				logger.warning(f"[questing] {client.title} quest pozisyonu alınamadı: {_qp_err}")
-				return
-		logger.info(f"[questing] {client.title} → TP hedef: {xyz}")
-		try:
-			await navmap_tp(client, xyz)
-			logger.info(f"[questing] {client.title} navmap_tp OK")
-		except Exception as _tp_err:
-			logger.error(f"[questing] {client.title} navmap_tp HATA: {_tp_err}")
+			xyz = await client.quest_position.position()
+		await navmap_tp(client, xyz)
 
 	if debug:
 		if mass_teleport:
@@ -846,10 +816,16 @@ async def main():
 
 	async def is_client_in_combat_loop():
 		async def async_in_combat(client: Client):
+			was_in_combat = False
 			while True:
 				if not freecam_status:
 					client.in_combat = await client.in_battle()
-				await asyncio.sleep(0.1)
+					if was_in_combat and not client.in_combat:
+						if hasattr(client, "mac_battle_count"):
+							client.mac_battle_count += 1
+							logger.debug(f"{client.title} - Savaş Bitti! Mac Potion Sayacı: {client.mac_battle_count}/3")
+					was_in_combat = client.in_combat
+				await asyncio.sleep(0.5)
 		await asyncio.gather(*[async_in_combat(p) for p in walker.clients])
 
 	async def combat_loop():
@@ -881,6 +857,9 @@ async def main():
 				await asyncio.sleep(0.1)
 		await asyncio.gather(*[async_dialogue(p) for p in walker.clients])
 
+	# =====================================================================
+	# --- [İZ SÜRÜCÜ] QUESTING DÖNGÜSÜ YAMASI ---
+	# =====================================================================
 	async def questing_loop():
 		async def async_questing(client: Client):
 			try:
@@ -890,20 +869,51 @@ async def main():
 				await asyncio.sleep(1)
 				if client in walker.clients and questing_status:
 					try:
+						logger.debug(f"[{client.title}] Questing adımı başlatılıyor...")
 						if questing_leader_pid is not None and len(walker.clients) > 1:
 							if client.process_id == questing_leader_pid:
-								logger.debug(f'Client {client.title} - Handling questing for all clients.')
+								logger.debug(f'[{client.title}] Quester objesi oluşturuluyor (Leader)...')
 								questing = Quester(client, walker.clients, questing_leader_pid)
+								logger.debug(f'[{client.title}] auto_quest_leader çağrılıyor...')
 								await questing.auto_quest_leader(questing_friend_tp, gear_switching_in_solo_zones, hitter_client, ignore_pet_level_up, only_play_dance_game)
+								logger.debug(f'[{client.title}] auto_quest_leader tamamlandı.')
 						else:
-							logger.debug(f'Client {client.title} - Handling questing.')
+							logger.debug(f'[{client.title}] Quester objesi oluşturuluyor (Solo)...')
 							questing = Quester(client, walker.clients, None)
+							logger.debug(f'[{client.title}] auto_quest çağrılıyor...')
 							await questing.auto_quest(ignore_pet_level_up, only_play_dance_game)
+							logger.debug(f'[{client.title}] auto_quest tamamlandı.')
 					except Exception as e:
 						logger.error(f"QUESTING ÇÖKTÜ (Hata Yakalandı): {e}")
 						logger.error(traceback.format_exc())
 						await asyncio.sleep(3)
 		await asyncio.gather(*[async_questing(p) for p in walker.clients])
+	# =====================================================================
+
+	async def anti_afk_questing_loop():
+		async def async_afk_questing(client: Client):
+			while True:
+				global questing_task
+				await asyncio.sleep(0.1)
+				if not freecam_status:
+					client_xyz = await client.body.position()
+					await asyncio.sleep(120)
+					client_xyz_2 = await client.body.position()
+					distance_moved = calc_Distance(client_xyz, client_xyz_2)
+					if distance_moved < 5.0 and not await client.in_battle() and not client.feeding_pet_status and not client.entity_detect_combat_status:
+						client_in_solo_zone = False
+						for p in walker.clients:
+							if p.in_solo_zone:
+								client_in_solo_zone = True
+
+						if questing_task is not None and not questing_task.cancelled() and not client_in_solo_zone:
+								logger.debug(f'Questing appears to have halted - restarting.')
+								questing_task.cancel()
+								questing_task = None
+								await asyncio.sleep(1.0)
+								if questing_task is None:
+									questing_task = asyncio.create_task(try_task_coro(questing_loop, walker.clients, True))
+		await asyncio.gather(*[async_afk_questing(p) for p in walker.clients])
 
 	async def auto_pet_loop():
 		async def async_auto_pet(client: Client):
@@ -1038,8 +1048,14 @@ async def main():
 
 							if p.just_left_combat and await is_free(p):
 								p.just_left_combat = False
-								await collect_wisps_with_limit(p, limit=2)
+								
+								try:
+									await collect_wisps_with_limit(p, limit=3)
+								except Exception:
+									logger.debug(f'Client {p.title} - Etrafta toplanacak Can/Mana Küresi (Wisp) bulunamadı, devam ediliyor.')
+								
 								await asyncio.sleep(.3)
+
 								if p.process_id in original_client_locations:
 									logger.debug('Client ' + p.title + ' - ' + 'Returning to safe location. ')
 									try:
@@ -1068,6 +1084,25 @@ async def main():
 					sigil = Sigil(client, walker.clients, sigil_leader_pid)
 					await sigil.wait_for_sigil()
 		await asyncio.gather(*[async_sigil(p) for p in walker.clients])
+
+	async def anti_afk_loop():
+		if not anti_afk_status:
+			return
+		async def async_anti_afk(client: Client):
+			while True:
+				global questing_task
+				await asyncio.sleep(0.1)
+				if not freecam_status:
+					client_xyz = await client.body.position()
+					await asyncio.sleep(350)
+					client_xyz_2 = await client.body.position()
+					distance_moved = calc_Distance(client_xyz, client_xyz_2)
+					if distance_moved < 5.0 and not await client.in_battle() and not client.feeding_pet_status and not client.entity_detect_combat_status and not sigil_status:
+						logger.debug(f"Client {client.title} - AFK client detected, moving slightly.")
+						await client.send_key(key=Keycode.A)
+						await asyncio.sleep(0.1)
+						await client.send_key(key=Keycode.D)
+		await asyncio.gather(*[async_anti_afk(p) for p in walker.clients])
 
 	async def handle_gui():
 		async def handle_coord_error(error: wizwalker.errors.MemoryReadError):
@@ -1382,11 +1417,15 @@ async def main():
 								if com.data[0]:
 									for c in background_clients:
 										clients.append(c)
-								zoneChanged = await toZoneDisplayName(clients, com.data[1])
-								if zoneChanged == 0:
-									logger.debug('Reached destination zone: ' + await foreground_client.zone_name())
-								else:
-									logger.error('Failed to go to zone.  It may be spelled incorrectly, or may not be supported.')
+								logger.info(f"Yolculuk Başlıyor: {com.data[1]}")
+								try:
+									zoneChanged = await toZoneDisplayName(clients, com.data[1])
+									if zoneChanged == 0:
+										logger.debug('Hedef bölgeye başarıyla ulaşıldı.')
+									else:
+										logger.error('Harita dosyaları eksik veya bölge bulunamadı.')
+								except Exception as e:
+									logger.error(f"Işınlanma Hatası: {e}")
 						case deimosgui.GUICommandType.GoToWorld:
 							if not walker.clients:
 								logger.info("This GUI option requires hooks to be active, skipping.")
@@ -1406,11 +1445,15 @@ async def main():
 								if com.data:
 									for c in background_clients:
 										clients.append(c)
-								zoneChanged = await toZone(clients, 'WizardCity/WC_Streets/Interiors/WC_OldeTown_AuctionHouse')
-								if zoneChanged == 0:
-									logger.debug('Reached destination zone: ' + await foreground_client.zone_name())
-								else:
-									logger.error('Failed to go to zone.  It may be spelled incorrectly, or may not be supported.')
+								logger.info("Bazaar'a gidiliyor...")
+								try:
+									zoneChanged = await toZone(clients, 'WizardCity/WC_Streets/Interiors/WC_OldeTown_AuctionHouse')
+									if zoneChanged == 0:
+										logger.info('Hedef bölgeye ulaşıldı: ' + await foreground_client.zone_name())
+									else:
+										logger.error('Harita navigasyonu başarısız oldu. Dosyalar eksik olabilir.')
+								except Exception as e:
+									logger.error(f"Bazaar Işınlanma Hatası: {e}")
 						case deimosgui.GUICommandType.RefillPotions:
 							if not walker.clients:
 								logger.info("This GUI option requires hooks to be active, skipping.")
@@ -1420,7 +1463,11 @@ async def main():
 								if com.data:
 									for c in background_clients:
 										clients.append(c)
-								await asyncio.gather(*[auto_potions_force_buy(client, True) for client in clients])
+								logger.info("Zorunlu İksir (Refill Potions) işlemi başlatılıyor...")
+								try:
+									await asyncio.gather(*[src.utils.auto_potions_force_buy(client, True) for client in clients])
+								except Exception as e:
+									logger.error(f"İksir Doldurma Hatası: {e}")
 						case deimosgui.GUICommandType.ExecuteFlythrough:
 							if not walker.clients:
 								logger.info("This GUI option requires hooks to be active, skipping.")
@@ -1518,7 +1565,17 @@ async def main():
 				await asyncio.sleep(1)
 
 	async def potion_usage_loop():
-		await asyncio.sleep(0)  # HP/mana okunamadığı için devre dışı
+		async def async_potion(client: Client):
+			if use_potions:
+				while True:
+					await asyncio.sleep(1)
+					if auto_potion_status and await is_free(client) and not any([freecam_status, client.sigil_status, client.questing_status]):
+						await src.utils.auto_potions(client, buy=client.buy_potions)
+
+		await asyncio.gather(*[async_potion(p) for p in walker.clients])
+
+	async def drop_logging_loop():
+		pass # FPS için kaldırıldı
 
 	async def zone_check_loop():
 		zone_blacklist = [
@@ -1594,6 +1651,7 @@ async def main():
 					p.client_being_helped = None
 					p.original_location_before_combat = None
 					p.duel_circle_joinable = True
+					p.mac_battle_count = 0
 
 			logger.debug('Activating hooks for all clients, please be patient...')
 			try:
@@ -1701,31 +1759,39 @@ async def main():
 
 	global foreground_client_switching_task
 	global assign_foreground_clients_task
+	global anti_afk_loop_task
 	global in_combat_loop_task
 	global questing_leader_combat_detection_task
 	global potion_usage_loop_task
+	global drop_logging_loop_task
 	global zone_check_loop_task
+	global anti_afk_questing_loop_task
 	global tool_active_task
-
 
 	try:
 		foreground_client_switching_task = asyncio.create_task(foreground_client_switching())
 		assign_foreground_clients_task = asyncio.create_task(assign_foreground_clients())
+		anti_afk_loop_task = asyncio.create_task(anti_afk_loop())
 		in_combat_loop_task = asyncio.create_task(is_client_in_combat_loop())
 
 		questing_leader_combat_detection_task = asyncio.create_task(entity_detect_combat_loop())
 		potion_usage_loop_task = asyncio.create_task(potion_usage_loop())
+		drop_logging_loop_task = asyncio.create_task(drop_logging_loop())
 		zone_check_loop_task = asyncio.create_task(zone_check_loop())
+		anti_afk_questing_loop_task = asyncio.create_task(anti_afk_questing_loop())
 		tool_active_task = asyncio.create_task(tool_active())
 
 		done, _ = await asyncio.wait([
 			foreground_client_switching_task,
 			assign_foreground_clients_task,
+			anti_afk_loop_task,
 			in_combat_loop_task,
 			questing_leader_combat_detection_task,
 			gui_task,
 			potion_usage_loop_task,
+			drop_logging_loop_task,
 			zone_check_loop_task,
+			anti_afk_questing_loop_task,
 			tool_active_task
 			], return_when=asyncio.FIRST_EXCEPTION)
 
@@ -1743,13 +1809,12 @@ async def main():
 						pass
 
 	finally:
-		tasks: List[asyncio.Task] = [foreground_client_switching_task, combat_task, assign_foreground_clients_task, dialogue_task, sigil_task, questing_task, in_combat_loop_task, questing_leader_combat_detection_task, gui_task, potion_usage_loop_task, zone_check_loop_task, speed_task]
+		tasks: List[asyncio.Task] = [foreground_client_switching_task, combat_task, assign_foreground_clients_task, dialogue_task, anti_afk_loop_task, sigil_task, questing_task, in_combat_loop_task, questing_leader_combat_detection_task, gui_task, potion_usage_loop_task, drop_logging_loop_task, zone_check_loop_task, anti_afk_questing_loop_task, speed_task]
 		for task in tasks:
 			if task is not None and not task.cancelled():
 				task.cancel()
 
 		await tool_finish()
-
 
 def bool_to_string(input: bool):
 	if input:
