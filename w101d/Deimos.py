@@ -110,7 +110,23 @@ async def _safe_ref_level(self):
     except Exception as e: logger.debug(f"[macOS] reference_level okunamadı ({e}), {_IMMORTAL_LVL} dönüyor"); return _IMMORTAL_LVL
 GameStats.reference_level = _safe_ref_level
 
-# 6. NAVMAP_TP INSTANT PATCH (wait_on_inuse=False — odaklanmamış pencerede de çalışır)
+# 6. WIZWALKER IS_FREE / WAIT_FOR_FREE BYPASS (macOS — should_update timeout)
+import wizwalker.utils as _ww_utils
+from wizwalker.client import Client as _WClient
+
+async def _is_free_always(client):
+    return True
+
+_ww_utils.is_free = _is_free_always
+
+_orig_wait_for_free = _WClient.wait_for_free if hasattr(_WClient, 'wait_for_free') else None
+if _orig_wait_for_free:
+    async def _wait_for_free_instant(self, *args, **kwargs):
+        return
+    _WClient.wait_for_free = _wait_for_free_instant
+    logger.debug("[macOS] wait_for_free bypass aktif")
+
+# 7. NAVMAP_TP INSTANT PATCH (wait_on_inuse=False — odaklanmamış pencerede de çalışır)
 from src import teleport_math as _tmath
 _orig_navmap_tp = _tmath.navmap_tp
 
@@ -123,7 +139,7 @@ async def _instant_navmap_tp(client, xyz):
         await _orig_navmap_tp(client, xyz)
 
 _tmath.navmap_tp = _instant_navmap_tp
-logger.info("[macOS] Tüm yamalar uygulandı (WAD, traversalData, mss, tesseract, HP/mana bypass, instant_tp)")
+logger.info("[macOS] Tüm yamalar uygulandı (WAD, traversalData, mss, tesseract, HP/mana, is_free, instant_tp)")
 
 # =====================================================================
 
