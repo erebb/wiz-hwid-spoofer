@@ -1,0 +1,70 @@
+2026-04-18 14:12:08.193 | DEBUG    | __main__:
+async_questing:872 - [p1] Questing adımı başlatılıyor...
+
+2026-04-18 14:12:08.300 | DEBUG    | __main__:
+async_questing:881 - [p1] Quester objesi oluşturuluyor (
+Solo)...
+2026-04-18 14:12:08.301 | DEBUG    | __main__:
+async_questing:883 - [p1] auto_quest çağrılıyor...
+2026-04-18 14:12:10.310 | ERROR    | __main__:
+async_questing:887 - QUESTING ÇÖKTÜ (Hata Yakalandı): Ti
+med out waiting for coro should_update
+2026-04-18 14:12:10.332 | ERROR    | __main__:
+async_questing:888 - Traceback (most recent call last):
+  File "C:\Python313\Lib\asyncio\tasks.py", line 507, in wait_for
+    return await fut
+           ^^^^^^^^^
+  File "C:\Python313\Lib\site-packages\wizwalker\utils.py", line 462, in _inner
+    await asyncio.sleep(sleep_time)
+  File "C:\Python313\Lib\asyncio\tasks.py", line 718, in sleep
+    return await future
+           ^^^^^^^^^^^^
+asyncio.exceptions.CancelledError
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\wizwalker\utils.py", line 465, in maybe_w
+ait_for_value_with_timeout
+    return await asyncio.wait_for(_inner(), timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\asyncio\tasks.py", line 506, in wait_for
+    async with timeouts.timeout(timeout):
+               ~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Python313\Lib\asyncio\timeouts.py", line 116, in __aexit__
+    raise TimeoutError from exc_val
+TimeoutError
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "Z:\Users\erenozdemir\.w101d_cache\Deimos\Deimos.py", line 884, in async_
+questing
+    await questing.auto_quest(ignore_pet_level_up, only_play_dance_game)
+  File "Z:\Users\erenozdemir\.w101d_cache\Deimos\src\questing.py", line 1409, in
+ auto_quest
+    await self.auto_quest_solo(ignore_pet_level_up=ignore_pet_level_up, play_dan
+ce_game=play_dance_game)
+  File "Z:\Users\erenozdemir\.w101d_cache\Deimos\src\questing.py", line 1344, in
+ auto_quest_solo
+    await navmap_tp(self.client, quest_xyz)
+  File "Z:\Users\erenozdemir\.w101d_cache\Deimos\src\teleport_math.py", line 266
+, in navmap_tp
+    await client.teleport(target_xyz)
+  File "C:\Python313\Lib\site-packages\wizwalker\client.py", line 521, in telepo
+rt
+    await self._teleport_object(
+    ...<6 lines>...
+    )
+  File "C:\Python313\Lib\site-packages\wizwalker\client.py", line 549, in _telep
+ort_object
+    await maybe_wait_for_value_with_timeout(
+    ...<3 lines>...
+    )
+  File "C:\Python313\Lib\site-packages\wizwalker\utils.py", line 467, in maybe_w
+ait_for_value_with_timeout
+    raise ExceptionalTimeout(
+        f"Timed out waiting for coro {coro.__name__}", possible_exception
+    )
+wizwalker.errors.ExceptionalTimeout: Timed out waiting for coro should_update
+
