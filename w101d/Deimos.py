@@ -395,7 +395,7 @@ async def navmap_teleport(foreground_client : wizwalker.Client, background_clien
 	async def client_navmap_teleport(client: Client, xyz: XYZ = None):
 		if not xyz:
 			xyz = await client.quest_position.position()
-		await navmap_tp(client, xyz)
+		await client.teleport(xyz)
 
 	if debug:
 		if mass_teleport:
