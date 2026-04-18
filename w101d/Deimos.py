@@ -96,7 +96,10 @@ import datetime
 from configparser import ConfigParser
 import statistics
 import re
-from pypresence import AioPresence
+try:
+    from pypresence import AioPresence
+except ImportError:
+    AioPresence = None
 from src.command_parser import execute_flythrough, parse_command
 from src.auto_pet import nomnom
 from src.drop_logger import logging_loop
@@ -1499,7 +1502,7 @@ async def main():
 		await asyncio.sleep(0)  # HP/mana okunamadığı için devre dışı
 
 	async def rpc_loop():
-		if rpc_status:
+		if rpc_status and AioPresence is not None:
 			try:
 				rpc = AioPresence(1000159655357587566)
 				await rpc.connect()
