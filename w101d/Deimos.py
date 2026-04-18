@@ -433,15 +433,10 @@ async def navmap_teleport(foreground_client : wizwalker.Client, background_clien
 				return
 		logger.info(f"[questing] {client.title} → TP hedef: {xyz}")
 		try:
-			await client.teleport(xyz)
-			logger.info(f"[questing] {client.title} teleport OK")
+			await navmap_tp(client, xyz)
+			logger.info(f"[questing] {client.title} navmap_tp OK")
 		except Exception as _tp_err:
-			logger.warning(f"[questing] {client.title} teleport HATA ({_tp_err}), navmap_tp deneniyor...")
-			try:
-				await navmap_tp(client, xyz)
-				logger.info(f"[questing] {client.title} navmap_tp OK (fallback)")
-			except Exception as _nm_err:
-				logger.error(f"[questing] {client.title} her iki TP yöntemi başarısız: {_nm_err}")
+			logger.error(f"[questing] {client.title} navmap_tp HATA: {_tp_err}")
 
 	if debug:
 		if mass_teleport:
