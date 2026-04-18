@@ -19,10 +19,16 @@ DEIMOS_DIR="$CACHE/Deimos"
 
 mkdir -p "$CACHE"
 
-# ── Eski embeddable kalıntısını temizle ───────
+# ── Eski Python kalıntılarını temizle ────────
 for old in "$WINEPREFIX/drive_c/Python311" "$WINEPREFIX/drive_c/Python312"; do
     [[ -d "$old" ]] && { echo "[setup] Temizleniyor: $old"; rm -rf "$old"; }
 done
+# Yarım kalan veya bozuk Python313 kurulumunu temizle
+# (python.exe yoksa kurulum tamamlanmamış demektir)
+if [[ -d "$PYTHON_DIR" && ! -f "$PYTHON_DIR/python.exe" ]]; then
+    echo "[setup] Bozuk/yarım Python313 kurulumu tespit edildi, temizleniyor..."
+    rm -rf "$PYTHON_DIR"
+fi
 if [[ -f "$PYTHON_DIR/python313._pth" ]]; then
     echo "[setup] Eski embeddable kurulum temizleniyor..."
     rm -rf "$PYTHON_DIR"
@@ -36,6 +42,11 @@ echo "[setup] vcrun2019 kuruluyor..."
 WINEPREFIX="$WINEPREFIX" winetricks --unattended vcrun2019 2>/dev/null || true
 
 # ── Python full installer ─────────────────────
+# Python dizini temizlendiyse installer'ı da sil → taze indirim
+if [[ ! -d "$PYTHON_DIR" && -f "$CACHE/$PYTHON_INSTALLER" ]]; then
+    echo "[setup] Taze kurulum için eski installer siliniyor..."
+    rm -f "$CACHE/$PYTHON_INSTALLER"
+fi
 if [[ ! -f "$CACHE/$PYTHON_INSTALLER" ]]; then
     echo "[setup] Python $PYTHON_VERSION indiriliyor..."
     curl -L --progress-bar -o "$CACHE/$PYTHON_INSTALLER" "$PYTHON_URL"
