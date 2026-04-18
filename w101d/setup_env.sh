@@ -5,9 +5,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/detect_wine.sh"
 
-PYTHON_VERSION="3.13.3"
-PYTHON_INSTALLER="python-${PYTHON_VERSION}-amd64.exe"
-PYTHON_URL="https://www.python.org/ftp/python/${PYTHON_VERSION}/${PYTHON_INSTALLER}"
 CACHE="$HOME/.w101d_cache"
 PYTHON_DIR="$WINEPREFIX/drive_c/Python313"
 SITE_PKG="$PYTHON_DIR/Lib/site-packages"
@@ -41,20 +38,23 @@ fi
 echo "[setup] vcrun2019 kuruluyor..."
 WINEPREFIX="$WINEPREFIX" winetricks --unattended vcrun2019 2>/dev/null || true
 
-# ── Python full installer ─────────────────────
-# Python dizini temizlendiyse installer'ı da sil → taze indirim
-if [[ ! -d "$PYTHON_DIR" && -f "$CACHE/$PYTHON_INSTALLER" ]]; then
-    echo "[setup] Taze kurulum için eski installer siliniyor..."
-    rm -f "$CACHE/$PYTHON_INSTALLER"
-fi
-if [[ ! -f "$CACHE/$PYTHON_INSTALLER" ]]; then
-    echo "[setup] Python $PYTHON_VERSION indiriliyor..."
-    curl -L --progress-bar -o "$CACHE/$PYTHON_INSTALLER" "$PYTHON_URL"
-fi
+# ── Python full installer (3.13.3 → fallback 3.13.9) ─────────────────────────
+_install_python_ver() {
+    local ver="$1"
+    local installer="python-${ver}-amd64.exe"
+    local url="https://www.python.org/ftp/python/${ver}/${installer}"
 
-if [[ ! -f "$WIN_PYTHON" ]]; then
-    echo "[setup] Python kuruluyor (1-2 dk sürebilir)..."
-    WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$CACHE/$PYTHON_INSTALLER" \
+    # Dizin temizlendiyse eski installer'ı da sil
+    if [[ ! -d "$PYTHON_DIR" && -f "$CACHE/$installer" ]]; then
+        rm -f "$CACHE/$installer"
+    fi
+    if [[ ! -f "$CACHE/$installer" ]]; then
+        echo "[setup] Python $ver indiriliyor..."
+        curl -L --progress-bar -o "$CACHE/$installer" "$url" || return 1
+    fi
+
+    echo "[setup] Python $ver kuruluyor (1-2 dk sürebilir)..."
+    WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$CACHE/$installer" \
         /quiet \
         "TargetDir=C:\\Python313" \
         InstallAllUsers=0 \
@@ -62,12 +62,24 @@ if [[ ! -f "$WIN_PYTHON" ]]; then
         Include_tcltk=1 \
         Include_pip=1 \
         Include_test=0 || true
-    if [[ ! -f "$WIN_PYTHON" ]]; then
-        echo "[setup] HATA: Python kurulumu başarısız — python.exe bulunamadı." >&2
-        echo "[setup]       Wine sürümünüzü kontrol edin: brew upgrade wine-stable" >&2
-        exit 1
+
+    [[ -f "$WIN_PYTHON" ]]
+}
+
+if [[ ! -f "$WIN_PYTHON" ]]; then
+    if _install_python_ver "3.13.3"; then
+        echo "[setup] Python 3.13.3 kurulumu tamamlandı."
+    else
+        echo "[setup] 3.13.3 başarısız, 3.13.9 deneniyor..."
+        rm -rf "$PYTHON_DIR"
+        if _install_python_ver "3.13.9"; then
+            echo "[setup] Python 3.13.9 kurulumu tamamlandı."
+        else
+            echo "[setup] HATA: Python kurulumu başarısız." >&2
+            echo "[setup]       brew upgrade wine-stable ile Wine'ı güncelleyin." >&2
+            exit 1
+        fi
     fi
-    echo "[setup] Python kurulumu tamamlandı."
 fi
 
 # ── pip upgrade ───────────────────────────────
