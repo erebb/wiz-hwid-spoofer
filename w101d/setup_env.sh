@@ -61,7 +61,12 @@ if [[ ! -f "$WIN_PYTHON" ]]; then
         PrependPath=0 \
         Include_tcltk=1 \
         Include_pip=1 \
-        Include_test=0
+        Include_test=0 || true
+    if [[ ! -f "$WIN_PYTHON" ]]; then
+        echo "[setup] HATA: Python kurulumu başarısız — python.exe bulunamadı." >&2
+        echo "[setup]       Wine sürümünüzü kontrol edin: brew upgrade wine-stable" >&2
+        exit 1
+    fi
     echo "[setup] Python kurulumu tamamlandı."
 fi
 
