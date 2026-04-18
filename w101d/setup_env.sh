@@ -53,9 +53,8 @@ _install_python_ver() {
         curl -L --progress-bar -o "$CACHE/$installer" "$url" || return 1
     fi
 
-    echo "[setup] Python $ver kuruluyor (1-2 dk sürebilir)..."
+    echo "[setup] Python $ver kuruluyor — GUI açılacak, 'Install Now'a tıklayın..."
     WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$CACHE/$installer" \
-        /quiet \
         "TargetDir=C:\\Python313" \
         InstallAllUsers=0 \
         PrependPath=0 \
