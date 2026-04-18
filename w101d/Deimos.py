@@ -100,8 +100,8 @@ from src.stat_viewer import total_stats
 from src.teleport_math import navmap_tp, calc_Distance
 from src.questing import Quester
 from src.sigil import Sigil
-from src.utils import index_with_str, is_visible_by_path, is_free, auto_potions, auto_potions_force_buy, to_world, collect_wisps_with_limit, try_task_coro, read_webpage, override_wiz_install_using_handle
-from src.paths import advance_dialog_path, decline_quest_path, play_button_path
+from src.utils import index_with_str, is_visible_by_path, is_free, auto_potions, auto_potions_force_buy, to_world, collect_wisps_with_limit, try_task_coro, read_webpage, override_wiz_install_using_handle, click_window_by_path
+from src.paths import advance_dialog_path, decline_quest_path, play_button_path, potion_usage_path
 import PySimpleGUI as gui
 import pyperclip
 from src.sprinty_client import SprintyClient
@@ -830,6 +830,37 @@ async def main():
 						logger.error(traceback.format_exc())
 						await asyncio.sleep(3)
 		await asyncio.gather(*[async_questing(p) for p in walker.clients])
+
+	async def quest_potion_loop():
+		"""Her 3 savaş bitişinde 1 iksir kullan. Memory okuma yok — crash-safe."""
+		BATTLES_PER_POTION = 3
+
+		async def _per_client(client: Client):
+			battle_count = 0
+			was_in_battle = False
+			while True:
+				await asyncio.sleep(1)
+				if not questing_status:
+					was_in_battle = False
+					continue
+				try:
+					in_battle = await client.in_battle()
+				except Exception:
+					continue
+				# Savaş bitti mi?
+				if was_in_battle and not in_battle:
+					battle_count += 1
+					if battle_count >= BATTLES_PER_POTION:
+						battle_count = 0
+						try:
+							if await is_visible_by_path(client, potion_usage_path):
+								await click_window_by_path(client, potion_usage_path)
+								logger.debug(f"[quest_potion] {client.title} iksir kullandı.")
+						except Exception as e:
+							logger.debug(f"[quest_potion] iksir kullanılamadı: {e}")
+				was_in_battle = in_battle
+
+		await asyncio.gather(*[_per_client(p) for p in walker.clients])
 
 	async def auto_pet_loop():
 		async def async_auto_pet(client: Client):
@@ -1641,6 +1672,7 @@ async def main():
 	global questing_leader_combat_detection_task
 	global potion_usage_loop_task
 	global zone_check_loop_task
+	global quest_potion_task
 	global tool_active_task
 
 
@@ -1652,6 +1684,7 @@ async def main():
 		questing_leader_combat_detection_task = asyncio.create_task(entity_detect_combat_loop())
 		potion_usage_loop_task = asyncio.create_task(potion_usage_loop())
 		zone_check_loop_task = asyncio.create_task(zone_check_loop())
+		quest_potion_task = asyncio.create_task(quest_potion_loop())
 		tool_active_task = asyncio.create_task(tool_active())
 
 		done, _ = await asyncio.wait([
@@ -1662,6 +1695,7 @@ async def main():
 			gui_task,
 			potion_usage_loop_task,
 			zone_check_loop_task,
+			quest_potion_task,
 			tool_active_task
 			], return_when=asyncio.FIRST_EXCEPTION)
 
@@ -1679,7 +1713,7 @@ async def main():
 						pass
 
 	finally:
-		tasks: List[asyncio.Task] = [foreground_client_switching_task, combat_task, assign_foreground_clients_task, dialogue_task, sigil_task, questing_task, in_combat_loop_task, questing_leader_combat_detection_task, gui_task, potion_usage_loop_task, zone_check_loop_task, speed_task, tool_active_task]
+		tasks: List[asyncio.Task] = [foreground_client_switching_task, combat_task, assign_foreground_clients_task, dialogue_task, sigil_task, questing_task, in_combat_loop_task, questing_leader_combat_detection_task, gui_task, potion_usage_loop_task, zone_check_loop_task, quest_potion_task, speed_task, tool_active_task]
 		for task in tasks:
 			if task is not None and not task.cancelled():
 				task.cancel()

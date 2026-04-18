@@ -79,7 +79,6 @@ WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
         "loguru>=0.7.2" \
         "pyperclip>=1.9.0" \
         "requests>=2.32.3" \
-        "pypresence>=4.3.0" \
         "pywin32>=306" \
         "pyyaml>=6.0.1" \
         "pymem==1.8.3" \
@@ -92,18 +91,16 @@ WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
         "pefile>=2021.5.24" \
         "lark>=1.1.9"
 
-# ── Ekran okuma bağımlılıkları (questing için) ─────────────────────────────
-# is_visible_by_path → Pillow + opencv (template matching, pixel karşılaştırma)
-# pytesseract → OCR (bazı quest text okuma işlemleri)
-# Dialogue/combat memory tabanlı çalışır; questing ekran okur → bu paketler gerekli.
-echo "[setup] Ekran okuma paketleri kuruluyor (Pillow, opencv, pytesseract, mss)..."
+# ── Görsel/OCR bağımlılıkları ──────────────────────────────────────────────
+# Pillow + opencv: Deimos image işlemleri için
+# pytesseract: tesseract OCR (quest text okuma)
+echo "[setup] Görsel/OCR paketleri kuruluyor (Pillow, opencv, pytesseract)..."
 WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
     -m pip install --quiet --prefer-binary \
         "Pillow>=10.0.0" \
         "opencv-python-headless>=4.8.0" \
         "numpy>=1.26.0" \
-        "pytesseract>=0.3.10" \
-        "mss>=9.0.1"
+        "pytesseract>=0.3.10"
 
 # pytesseract, tesseract OCR binary'sine ihtiyaç duyar.
 # macOS'ta brew ile kurulup Wine'a köprülenir.
