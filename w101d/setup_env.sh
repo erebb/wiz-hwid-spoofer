@@ -63,23 +63,35 @@ _install_python_ver() {
         Include_pip=1 \
         Include_test=0 || true
 
-    [[ -f "$WIN_PYTHON" ]]
+    # python.exe var mı + gerçekten çalışıyor mu kontrol et
+    [[ -f "$WIN_PYTHON" ]] && \
+        WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
+            -c "import sys, os; sys.exit(0)" &>/dev/null
 }
 
-if [[ ! -f "$WIN_PYTHON" ]]; then
-    if _install_python_ver "3.13.3"; then
-        echo "[setup] Python 3.13.3 kurulumu tamamlandı."
-    else
-        echo "[setup] 3.13.3 başarısız, 3.13.9 deneniyor..."
-        rm -rf "$PYTHON_DIR"
-        if _install_python_ver "3.13.9"; then
-            echo "[setup] Python 3.13.9 kurulumu tamamlandı."
-        else
-            echo "[setup] HATA: Python kurulumu başarısız." >&2
-            echo "[setup]       brew upgrade wine-stable ile Wine'ı güncelleyin." >&2
-            exit 1
-        fi
+_try_install() {
+    local ver="$1"
+    # Önceki yarım kurulumu temizle
+    rm -rf "$PYTHON_DIR"
+    if _install_python_ver "$ver"; then
+        echo "[setup] Python $ver kurulumu tamamlandı."
+        return 0
     fi
+    echo "[setup] Python $ver başarısız (stdlib yüklenemedi)."
+    rm -rf "$PYTHON_DIR"
+    return 1
+}
+
+if ! ( [[ -f "$WIN_PYTHON" ]] && \
+       WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
+           -c "import sys, os; sys.exit(0)" &>/dev/null ); then
+    _try_install "3.13.3" || \
+    _try_install "3.13.9" || {
+        echo "[setup] HATA: Python 3.13.3 ve 3.13.9 kurulumu başarısız." >&2
+        echo "[setup]       Wine 11.0'da NtLockFile hatası var." >&2
+        echo "[setup]       Çözüm: brew upgrade wine-stable" >&2
+        exit 1
+    }
 fi
 
 # ── pip upgrade ───────────────────────────────
