@@ -140,7 +140,8 @@ WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
         "Pillow>=10.0.0" \
         "opencv-python-headless>=4.8.0" \
         "numpy>=1.26.0" \
-        "pytesseract>=0.3.10"
+        "pytesseract>=0.3.10" \
+        "mss>=9.0.1"
 
 # pytesseract, tesseract OCR binary'sine ihtiyaç duyar.
 # macOS'ta brew ile kurulup Wine'a köprülenir.

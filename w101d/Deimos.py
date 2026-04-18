@@ -31,6 +31,21 @@ if not os.path.exists(traversal_folder):
 wn.DATA_DIRECTORY = pathlib.Path(traversal_folder)
 os.environ["WIZSPRINTER_DATA_PATH"] = traversal_folder
 
+# 3. MSS ile Ekran Yakalama (Wine+DXVK'da PIL ImageGrab siyah döndürür)
+try:
+    import mss as _mss_lib
+    from PIL import Image as _PILImage, ImageGrab as _ImageGrab
+    _sct = _mss_lib.mss()
+    def _mss_grab(bbox=None, *args, **kwargs):
+        if bbox:
+            mon = {"left": int(bbox[0]), "top": int(bbox[1]), "width": int(bbox[2]-bbox[0]), "height": int(bbox[3]-bbox[1])}
+        else:
+            mon = _sct.monitors[0]
+        raw = _sct.grab(mon)
+        return _PILImage.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
+    _ImageGrab.grab = _mss_grab
+except Exception:
+    pass
 
 # 4. TESSERACT MAC-NATIVE YAMASI 
 import pytesseract
