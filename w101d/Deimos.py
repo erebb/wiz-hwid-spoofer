@@ -19,7 +19,9 @@ _wad_orig = wizwalker.file_readers.wad.Wad.from_game_data
 def _patched_from_game_data(cls, name, *args, **kwargs):
     local_path = os.path.join(os.getcwd(), f"{name}.wad")
     if os.path.exists(local_path):
+        logger.debug(f"[macOS] WAD bulundu (yerel): {local_path}")
         return cls(local_path)
+    logger.debug(f"[macOS] WAD yerel bulunamadı, orijinal yol deneniyor: {name}.wad")
     return _wad_orig.__func__(cls, name, *args, **kwargs)
 wizwalker.file_readers.wad.Wad.from_game_data = classmethod(_patched_from_game_data)
 
@@ -30,6 +32,7 @@ if not os.path.exists(traversal_folder):
     os.makedirs(traversal_folder)
 wn.DATA_DIRECTORY = pathlib.Path(traversal_folder)
 os.environ["WIZSPRINTER_DATA_PATH"] = traversal_folder
+logger.debug(f"[macOS] traversalData dizini: {traversal_folder}")
 
 # 3. MSS ile Ekran Yakalama (Wine+DXVK'da PIL ImageGrab siyah döndürür)
 try:
@@ -39,13 +42,22 @@ try:
     def _mss_grab(bbox=None, *args, **kwargs):
         if bbox:
             mon = {"left": int(bbox[0]), "top": int(bbox[1]), "width": int(bbox[2]-bbox[0]), "height": int(bbox[3]-bbox[1])}
+            logger.debug(f"[macOS] mss ekran yakalama: bbox={bbox} mon={mon}")
         else:
             mon = _sct.monitors[0]
-        raw = _sct.grab(mon)
-        return _PILImage.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
+            logger.debug(f"[macOS] mss ekran yakalama: tam ekran mon={mon}")
+        try:
+            raw = _sct.grab(mon)
+            img = _PILImage.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
+            logger.debug(f"[macOS] mss grab OK: boyut={raw.size}")
+            return img
+        except Exception as _grab_err:
+            logger.warning(f"[macOS] mss grab HATA ({_grab_err}), boş görüntü dönüyor")
+            return _PILImage.new("RGB", (mon.get("width", 1), mon.get("height", 1)))
     _ImageGrab.grab = _mss_grab
-except Exception:
-    pass
+    logger.debug("[macOS] mss ekran yakalama aktif (PIL ImageGrab override edildi)")
+except Exception as e:
+    logger.warning(f"[macOS] mss yüklenemedi, PIL ImageGrab kullanılıyor (siyah olabilir): {e}")
 
 # 4. TESSERACT MAC-NATIVE YAMASI 
 import pytesseract
@@ -67,32 +79,34 @@ from wizwalker.memory.memory_objects.game_stats import GameStats
 _orig_max_mana = GameStats.max_mana
 async def _safe_max_mana(self):
     try: return await _orig_max_mana(self)
-    except: return 100
+    except Exception as e: logger.debug(f"[macOS] max_mana okunamadı ({e}), 100 dönüyor"); return 100
 GameStats.max_mana = _safe_max_mana
 
 _orig_cur_mana = GameStats.current_mana
 async def _safe_cur_mana(self):
     try: return await _orig_cur_mana(self)
-    except: return 100
+    except Exception as e: logger.debug(f"[macOS] current_mana okunamadı ({e}), 100 dönüyor"); return 100
 GameStats.current_mana = _safe_cur_mana
 
 _orig_max_hp = GameStats.max_hitpoints
 async def _safe_max_hp(self):
     try: return await _orig_max_hp(self)
-    except: return 1000
+    except Exception as e: logger.debug(f"[macOS] max_hitpoints okunamadı ({e}), 1000 dönüyor"); return 1000
 GameStats.max_hitpoints = _safe_max_hp
 
 _orig_cur_hp = GameStats.current_hitpoints
 async def _safe_cur_hp(self):
     try: return await _orig_cur_hp(self)
-    except: return 1000
+    except Exception as e: logger.debug(f"[macOS] current_hitpoints okunamadı ({e}), 1000 dönüyor"); return 1000
 GameStats.current_hitpoints = _safe_cur_hp
 
 _orig_ref_level = GameStats.reference_level
 async def _safe_ref_level(self):
     try: return await _orig_ref_level(self)
-    except: return 100
+    except Exception as e: logger.debug(f"[macOS] reference_level okunamadı ({e}), 100 dönüyor"); return 100
 GameStats.reference_level = _safe_ref_level
+
+logger.info("[macOS] Tüm yamalar uygulandı (WAD, traversalData, mss, tesseract, HP/mana bypass)")
 
 # =====================================================================
 
@@ -411,8 +425,23 @@ async def xyz_sync(foreground_client : Client, background_clients : list[Client]
 async def navmap_teleport(foreground_client : wizwalker.Client, background_clients : list[Client], mass_teleport: bool = False, debug : bool = False, xyz: XYZ = None):
 	async def client_navmap_teleport(client: Client, xyz: XYZ = None):
 		if not xyz:
-			xyz = await client.quest_position.position()
-		await navmap_tp(client, xyz)
+			try:
+				xyz = await client.quest_position.position()
+				logger.debug(f"[questing] {client.title} quest pozisyonu: {xyz}")
+			except Exception as _qp_err:
+				logger.warning(f"[questing] {client.title} quest pozisyonu alınamadı: {_qp_err}")
+				return
+		logger.info(f"[questing] {client.title} → TP hedef: {xyz}")
+		try:
+			await client.teleport(xyz)
+			logger.info(f"[questing] {client.title} teleport OK")
+		except Exception as _tp_err:
+			logger.warning(f"[questing] {client.title} teleport HATA ({_tp_err}), navmap_tp deneniyor...")
+			try:
+				await navmap_tp(client, xyz)
+				logger.info(f"[questing] {client.title} navmap_tp OK (fallback)")
+			except Exception as _nm_err:
+				logger.error(f"[questing] {client.title} her iki TP yöntemi başarısız: {_nm_err}")
 
 	if debug:
 		if mass_teleport:
