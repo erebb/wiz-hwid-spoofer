@@ -225,13 +225,7 @@ echo "[QuickLaunch] Oyun başlatılıyor..."
 echo "[QuickLaunch] (İlk 10 saniye Wine çıktısı aşağıda görünür — normal)"
 echo ""
 
-# FPS / performans: Wine debug output kapat, DXVK log kapat
-export WINEDEBUG="-all"
-export DXVK_LOG_LEVEL="none"
-export WINEESYNC=1       # Linux-style esync (destekleniyorsa)
-export WINEMSYNC=1       # macOS Mach semaphore sync — esync'ten daha iyi
-export DXVK_ASYNC=1      # Shader compilation async yap → stutter azalt
-export DXVK_FRAME_RATE=60  # FPS'i 60'a sabitle → CPU/GPU ısınmasını önle
+export DXVK_FRAME_RATE=60
 
 cd "$WIZ_BIN_DIR"
 # Doğru arg formatı (umbra-launcher + MidasModLoader referansına göre):
