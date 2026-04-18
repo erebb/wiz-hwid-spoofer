@@ -222,16 +222,15 @@ if [[ ! -f "$_WIZ_DATA/BaseMessages.wad" ]]; then
 fi
 
 echo "[QuickLaunch] Oyun başlatılıyor..."
+echo "[QuickLaunch] (İlk 10 saniye Wine çıktısı aşağıda görünür — normal)"
 echo ""
 
-# FPS / performans: Wine + MoltenVK debug output kapat
+# FPS / performans: Wine debug output kapat, DXVK log kapat
 export WINEDEBUG="-all"
 export DXVK_LOG_LEVEL="none"
-export WINEESYNC=1
-export WINEMSYNC=1
-export DXVK_ASYNC=1
-export MVK_CONFIG_LOG_LEVEL=0        # MoltenVK [mvk-info] mesajlarını kapat
-export MVK_CONFIG_DEBUG_MODE=0
+export WINEESYNC=1       # Linux-style esync (destekleniyorsa)
+export WINEMSYNC=1       # macOS Mach semaphore sync — esync'ten daha iyi
+export DXVK_ASYNC=1      # Shader compilation async yap → stutter azalt
 
 cd "$WIZ_BIN_DIR"
 # Doğru arg formatı (umbra-launcher + MidasModLoader referansına göre):
@@ -240,7 +239,7 @@ cd "$WIZ_BIN_DIR"
 "$WINE_BIN" WizardGraphicalClient.exe \
     -L login.us.wizard101.com 12000 \
     -U "..$WIZ_UID" "$WIZ_CK2" "$WIZ_USER" \
-    >/dev/null 2>&1 &
+    2>&1 | head -40 &
 
 # Oyunun başlayıp başlamadığını kısa süre izle
 sleep 6
