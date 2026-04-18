@@ -228,7 +228,9 @@ echo ""
 # FPS / performans: Wine debug output kapat, DXVK log kapat
 export WINEDEBUG="-all"
 export DXVK_LOG_LEVEL="none"
-export WINEESYNC=1
+export WINEESYNC=1       # Linux-style esync (destekleniyorsa)
+export WINEMSYNC=1       # macOS Mach semaphore sync — esync'ten daha iyi
+export DXVK_ASYNC=1      # Shader compilation async yap → stutter azalt
 
 cd "$WIZ_BIN_DIR"
 # Doğru arg formatı (umbra-launcher + MidasModLoader referansına göre):

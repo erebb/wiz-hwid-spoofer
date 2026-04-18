@@ -31,20 +31,7 @@ if not os.path.exists(traversal_folder):
 wn.DATA_DIRECTORY = pathlib.Path(traversal_folder)
 os.environ["WIZSPRINTER_DATA_PATH"] = traversal_folder
 
-# 3. MSS ile Ekran Körlüğü Çözümü
-import mss
-from PIL import Image, ImageGrab
-_sct = mss.mss()
-def _mss_grab(bbox=None, *args, **kwargs):
-    if bbox:
-        monitor = {"top": int(bbox[1]), "left": int(bbox[0]), "width": int(bbox[2]-bbox[0]), "height": int(bbox[3]-bbox[1])}
-    else:
-        monitor = _sct.monitors[0]
-    sct_img = _sct.grab(monitor)
-    return Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
-ImageGrab.grab = _mss_grab
-
-# 4. TESSERACT MAC-NATIVE YAMASI 
+# 3. TESSERACT MAC-NATIVE YAMASI 
 import pytesseract
 mac_silicon_path = r"Z:\opt\homebrew\bin\tesseract"
 mac_intel_path = r"Z:\usr\local\bin\tesseract"

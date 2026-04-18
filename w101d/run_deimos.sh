@@ -255,6 +255,7 @@ echo ""
 export WINEDEBUG="-all"
 export DXVK_LOG_LEVEL="none"
 export WINEESYNC=1
+export WINEMSYNC=1
 
 case "$MODE" in
     deimos)
