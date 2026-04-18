@@ -12,8 +12,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ── Giriş bilgileri ───────────────────────────────────────────────────────────
-WIZ_USER="KULLANICI_ADIN"
-WIZ_PASS="SIFREN"
+WIZ_USER="mevlut11"
+WIZ_PASS="Fenerbahce123#"
 
 # Steam hesabı: 1 olarak ayarla (normal KI hesabı için 0)
 # AccountClientMismatch alıyorsanız bu değeri değiştirin.
@@ -156,7 +156,7 @@ if [[ -z "${WIZ_GAME_VERSION:-}" ]]; then
         grep -i '"Version"' "$WIZ_PREFIX/user.reg" "$WIZ_PREFIX/system.reg" \
              2>/dev/null \
         | grep -i "KingsIsle\|Wizard101" \
-        | sed 's/.*"Version"="\([^"]*\)".*/\1/' \
+        | grep -oP '"Version"="\K[^"]+' \
         | head -1 || true
     )
     # Alternatif: section'a göre ara
