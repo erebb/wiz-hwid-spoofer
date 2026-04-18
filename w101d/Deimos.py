@@ -117,6 +117,24 @@ if hasattr(src.questing, "is_potion_needed"): src.questing.is_potion_needed = ma
 if hasattr(src.questing, "auto_potions"): src.questing.auto_potions = mac_auto_potions
 if hasattr(src.questing, "auto_potions_force_buy"): src.questing.auto_potions_force_buy = mac_auto_potions_force_buy
 
+# 6. CLIENT.TELEPORT WAIT_ON_INUSE=FALSE PATCH
+# questing.py → navmap_tp → client.teleport() zinciri, modül patch'ini atlar.
+# Client class'ına doğrudan patch yaparak tüm teleport çağrılarını etkiler.
+from wizwalker.client import Client as _WClient
+
+_orig_teleport = _WClient.teleport
+async def _teleport_nowait(self, xyz, wait_on_inuse=True, **kwargs):
+    try:
+        await _orig_teleport(self, xyz, wait_on_inuse=False, **kwargs)
+    except Exception as _te:
+        logger.warning(f"[macOS] teleport HATA ({_te}), tekrar deneniyor...")
+        try:
+            await _orig_teleport(self, xyz, wait_on_inuse=False, **kwargs)
+        except Exception as _te2:
+            logger.error(f"[macOS] teleport kesin HATA: {_te2}")
+_WClient.teleport = _teleport_nowait
+logger.debug("[macOS] Client.teleport wait_on_inuse=False patch aktif")
+
 # =====================================================================
 
 from wizwalker import Keycode, HotkeyListener, ModifierKeys, utils, XYZ, Orient
