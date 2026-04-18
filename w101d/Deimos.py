@@ -1116,6 +1116,14 @@ async def main():
 				if client in walker.clients and client.sigil_status and not freecam_status:
 					sigil = Sigil(client, walker.clients, sigil_leader_pid)
 					await sigil.wait_for_sigil()
+					# Her sigil dönüşünde potion sayacını kontrol et
+					if getattr(client, "mac_battle_count", 0) >= 3:
+						logger.info(f"{client.title} - Sigil sonrası iksir ({client.mac_battle_count} savaş)")
+						try:
+							await src.utils.auto_potions(client, buy=False)
+						except Exception as _pe:
+							logger.debug(f"{client.title} - Sigil potion hata ({_pe}), atlandı.")
+						client.mac_battle_count = 0
 		await asyncio.gather(*[async_sigil(p) for p in walker.clients])
 
 	async def anti_afk_loop():
