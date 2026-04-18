@@ -231,6 +231,7 @@ export DXVK_LOG_LEVEL="none"
 export WINEESYNC=1       # Linux-style esync (destekleniyorsa)
 export WINEMSYNC=1       # macOS Mach semaphore sync — esync'ten daha iyi
 export DXVK_ASYNC=1      # Shader compilation async yap → stutter azalt
+export DXVK_FRAME_RATE=60  # FPS'i 60'a sabitle → CPU/GPU ısınmasını önle
 
 cd "$WIZ_BIN_DIR"
 # Doğru arg formatı (umbra-launcher + MidasModLoader referansına göre):
