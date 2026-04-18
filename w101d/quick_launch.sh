@@ -225,6 +225,11 @@ echo "[QuickLaunch] Oyun başlatılıyor..."
 echo "[QuickLaunch] (İlk 10 saniye Wine çıktısı aşağıda görünür — normal)"
 echo ""
 
+# FPS / performans: Wine debug output kapat, DXVK log kapat
+export WINEDEBUG="-all"
+export DXVK_LOG_LEVEL="none"
+export WINEESYNC=1
+
 cd "$WIZ_BIN_DIR"
 # Doğru arg formatı (umbra-launcher + MidasModLoader referansına göre):
 #   -L <host> <port> -U ..<uid> <ck2> <username>

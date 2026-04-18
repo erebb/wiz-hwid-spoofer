@@ -102,16 +102,13 @@ from wizwalker.memory.memory_objects.window import Window
 import time
 import sys
 import ctypes
-import winreg
 import subprocess
 import datetime
 from configparser import ConfigParser
 import statistics
 import re
-from pypresence import AioPresence
 from src.command_parser import execute_flythrough, parse_command
 from src.auto_pet import nomnom
-from src.drop_logger import logging_loop
 from src.stat_viewer import total_stats
 from src.teleport_math import navmap_tp, calc_Distance
 from src.questing import Quester
@@ -122,7 +119,6 @@ import PySimpleGUI as gui
 import pyperclip
 from src.sprinty_client import SprintyClient
 from src.gui_inputs import param_input, trunc
-from src import discsdk
 from wizwalker.extensions.wizsprinter.wiz_navigator import toZoneDisplayName, toZone
 from wizwalker.extensions.wizsprinter.sprinty_combat import SprintyCombat
 from src.config_combat import StrCombatConfigProvider, delegate_combat_configs, default_config
@@ -183,12 +179,9 @@ parser = ConfigParser()
 def read_config(config_name : str):
 	parser.read(config_name)
 
-	global speed_multiplier, use_potions, rpc_status, drop_status, anti_afk_status
+	global speed_multiplier, use_potions
 	speed_multiplier = parser.getfloat('settings', 'speed_multiplier', fallback=5.0)
 	use_potions = parser.getboolean('settings', 'use_potions', fallback=True)
-	rpc_status = parser.getboolean('settings', 'rich_presence', fallback=True)
-	drop_status = parser.getboolean('settings', 'drop_logging', fallback=True)
-	anti_afk_status = parser.getboolean('settings', 'use_anti_afk', fallback=True)
 
 	global x_press_key, sync_locations_key, quest_teleport_key, mass_quest_teleport_key, toggle_speed_key, friend_teleport_key, kill_tool_key, toggle_auto_combat_key, toggle_auto_dialogue_key, toggle_auto_sigil_key, toggle_freecam_key, toggle_auto_questing_key
 	x_press_key = parser.get('hotkeys', 'x_press', fallback='X')
@@ -851,31 +844,6 @@ async def main():
 						await asyncio.sleep(3)
 		await asyncio.gather(*[async_questing(p) for p in walker.clients])
 
-	async def anti_afk_questing_loop():
-		async def async_afk_questing(client: Client):
-			while True:
-				global questing_task
-				await asyncio.sleep(0.1)
-				if not freecam_status:
-					client_xyz = await client.body.position()
-					await asyncio.sleep(120)
-					client_xyz_2 = await client.body.position()
-					distance_moved = calc_Distance(client_xyz, client_xyz_2)
-					if distance_moved < 5.0 and not await client.in_battle() and not client.feeding_pet_status and not client.entity_detect_combat_status:
-						client_in_solo_zone = False
-						for p in walker.clients:
-							if p.in_solo_zone:
-								client_in_solo_zone = True
-
-						if questing_task is not None and not questing_task.cancelled() and not client_in_solo_zone:
-								logger.debug(f'Questing appears to have halted - restarting.')
-								questing_task.cancel()
-								questing_task = None
-								await asyncio.sleep(1.0)
-								if questing_task is None:
-									questing_task = asyncio.create_task(try_task_coro(questing_loop, walker.clients, True))
-		await asyncio.gather(*[async_afk_questing(p) for p in walker.clients])
-
 	async def auto_pet_loop():
 		async def async_auto_pet(client: Client):
 			while True:
@@ -1039,25 +1007,6 @@ async def main():
 					sigil = Sigil(client, walker.clients, sigil_leader_pid)
 					await sigil.wait_for_sigil()
 		await asyncio.gather(*[async_sigil(p) for p in walker.clients])
-
-	async def anti_afk_loop():
-		if not anti_afk_status:
-			return
-		async def async_anti_afk(client: Client):
-			while True:
-				global questing_task
-				await asyncio.sleep(0.1)
-				if not freecam_status:
-					client_xyz = await client.body.position()
-					await asyncio.sleep(350)
-					client_xyz_2 = await client.body.position()
-					distance_moved = calc_Distance(client_xyz, client_xyz_2)
-					if distance_moved < 5.0 and not await client.in_battle() and not client.feeding_pet_status and not client.entity_detect_combat_status and not sigil_status:
-						logger.debug(f"Client {client.title} - AFK client detected, moving slightly.")
-						await client.send_key(key=Keycode.A)
-						await asyncio.sleep(0.1)
-						await client.send_key(key=Keycode.D)
-		await asyncio.gather(*[async_anti_afk(p) for p in walker.clients])
 
 	async def handle_gui():
 		async def handle_coord_error(error: wizwalker.errors.MemoryReadError):
@@ -1517,128 +1466,6 @@ async def main():
 
 		await asyncio.gather(*[async_potion(p) for p in walker.clients])
 
-	async def rpc_loop():
-		if rpc_status:
-			try:
-				rpc = AioPresence(1000159655357587566)
-				await rpc.connect()
-			except Exception as e:
-				logger.error(e)
-			else:
-				client: Client = walker.clients[0]
-				zone_name: str = None
-				while True:
-					for c in walker.clients:
-						c: Client
-						if c.is_foreground:
-							client = c
-							break
-
-					await asyncio.sleep(1)
-					zone_name = await client.zone_name()
-
-					if zone_name:
-						zone_list = zone_name.split('/')
-						if len(zone_list):
-							status_str = zone_list[0]
-						else:
-							status_str = zone_name
-
-						if len(zone_list) > 1:
-							if 'Housing_' in zone_name:
-								status_str = status_str.replace('Housing_', '')
-								end_zone_list = zone_list[-1].split('_')
-								end_zone = f' - {end_zone_list[-1]}'
-							elif 'Housing' in zone_name:
-								end_zone_list = zone_list[-1].split('_')
-								if 'School' in zone_list:
-									status_str = end_zone_list[0] + 'House'
-								else:
-									status_str = zone_list[1]
-								end_zone = f' - {end_zone_list[-1]}'
-							else:
-								end_zone = None
-
-							if not end_zone:
-								area_list: list[str] = zone_list[-1].split('_')
-								del area_list[0]
-								for a in area_list.copy():
-									if any([s.isdigit() for s in a]):
-										area_list.remove(a)
-								seperator = ' '
-								area = seperator.join(area_list)
-								zone_word_list = re.findall('[A-Z][^A-Z]*', area)
-								if zone_word_list:
-									end_zone = f' - {seperator.join(zone_word_list)}'
-								else:
-									end_zone = ''
-					else:
-						end_zone = ''
-
-					status_str = status_str.replace('DragonSpire', 'Dragonspyre')
-					status_list = status_str.split('_')
-					if len(status_list[0]) <= 3:
-						del status_list[0]
-
-					seperator = ' '
-					status_str = seperator.join(status_list)
-
-					status_list = re.findall('[A-Z][^A-Z]*', status_str)
-					status_str = seperator.join(status_list)
-
-					if 'ext' in end_zone.lower():
-						end_zone = ' - Outside'
-					elif 'int' in end_zone.lower():
-						end_zone = ' - Inside'
-
-					if await client.in_battle():
-						task_str = 'Fighting '
-					elif questing_status:
-						task_str = 'Questing '
-					elif sigil_status:
-						task_str = 'Farming '
-					else:
-						task_str = ''
-
-					if not any([client.is_foreground for client in walker.clients]):
-						details_pane = 'Idle'
-					else:
-						details_pane = 'Active'
-
-					try:
-						await rpc.update(state=f'{task_str}In {status_str}{end_zone}', details=details_pane)
-					except Exception as e:
-						logger.error(e)
-
-
-	def ban_thread():
-		shake = discsdk.serialize_message(
-			discsdk.Opcodes.Handshake,
-			{
-				"v": discsdk.rpc_version,
-				"client_id": str(discsdk.app_id)
-			}
-		)
-		while True:
-			try:
-				banlistcontents = requests.get(f"https://raw.githubusercontent.com/{tool_author}/{tool_name.lower()}-bans/main/{tool_name}Bans.txt").content.decode()
-				banlist = set([x.split(" ")[0].strip() for x in banlistcontents.splitlines()])
-
-				handle = discsdk.connect()
-				discsdk.send(handle, shake)
-				resp = discsdk.recv(handle)
-				discsdk.close(handle)
-
-				user_id = resp["data"]["user"]["id"]
-				if user_id in banlist:
-					break
-			except:
-				pass
-
-			time.sleep(5 * 60)
-
-	async def drop_logging_loop():
-		await asyncio.gather(*[logging_loop(p) for p in walker.clients])
 
 	async def zone_check_loop():
 		zone_blacklist = [
@@ -1683,28 +1510,6 @@ async def main():
 	gui_task = asyncio.create_task(handle_gui())
 	await asyncio.sleep(2)
 
-	async def ban_watcher():
-		known_ban = False
-		try:
-			rkey = winreg.OpenKeyEx(winreg.HKEY_CURRENT_USER, r"SOFTWARE\Slackaduts\Deimos", access=winreg.KEY_READ)
-			a = winreg.QueryValueEx(rkey, "badboy")[0]
-			known_ban = a != 0
-		except:
-			pass
-
-		if not known_ban:
-			ban_task = threading.Thread(target=ban_thread)
-			ban_task.daemon = True 
-			ban_task.start()
-			while ban_task.is_alive():
-				await asyncio.sleep(1)
-		try:
-			rkey = winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, r"SOFTWARE\Slackaduts\Deimos", access=winreg.KEY_ALL_ACCESS)
-			winreg.SetValueEx(rkey, "badboy", 0, winreg.REG_DWORD, 1)
-		except:
-			pass
-		cMessageBox(None, "Deimos has encountered a fatal error (Code 0C24). Please contact slackaduts on discord for more info.", "Deimos error", 0x10 | 0x1000)
-		sys.exit(0)
 
 
 	async def hooking_logic(default_logic : bool = False):
@@ -1845,46 +1650,31 @@ async def main():
 
 	global foreground_client_switching_task
 	global assign_foreground_clients_task
-	global anti_afk_loop_task
 	global in_combat_loop_task
 	global questing_leader_combat_detection_task
 	global potion_usage_loop_task
-	global rpc_loop_task
-	global drop_logging_loop_task
 	global zone_check_loop_task
-	global anti_afk_questing_loop_task
-	global ban_watcher_task
 	global tool_active_task
 
 
 	try:
 		foreground_client_switching_task = asyncio.create_task(foreground_client_switching())
 		assign_foreground_clients_task = asyncio.create_task(assign_foreground_clients())
-		anti_afk_loop_task = asyncio.create_task(anti_afk_loop())
 		in_combat_loop_task = asyncio.create_task(is_client_in_combat_loop())
 
 		questing_leader_combat_detection_task = asyncio.create_task(entity_detect_combat_loop())
 		potion_usage_loop_task = asyncio.create_task(potion_usage_loop())
-		rpc_loop_task = asyncio.create_task(rpc_loop())
-		drop_logging_loop_task = asyncio.create_task(drop_logging_loop())
 		zone_check_loop_task = asyncio.create_task(zone_check_loop())
-		anti_afk_questing_loop_task = asyncio.create_task(anti_afk_questing_loop())
-		ban_watcher_task = asyncio.create_task(ban_watcher())
 		tool_active_task = asyncio.create_task(tool_active())
 
 		done, _ = await asyncio.wait([
-			ban_watcher_task,
 			foreground_client_switching_task,
 			assign_foreground_clients_task,
-			anti_afk_loop_task,
 			in_combat_loop_task,
 			questing_leader_combat_detection_task,
 			gui_task,
 			potion_usage_loop_task,
-			rpc_loop_task,
-			drop_logging_loop_task,
 			zone_check_loop_task,
-			anti_afk_questing_loop_task,
 			tool_active_task
 			], return_when=asyncio.FIRST_EXCEPTION)
 
@@ -1902,7 +1692,7 @@ async def main():
 						pass
 
 	finally:
-		tasks: List[asyncio.Task] = [ban_watcher_task, foreground_client_switching_task, combat_task, assign_foreground_clients_task, dialogue_task, anti_afk_loop_task, sigil_task, questing_task, in_combat_loop_task, questing_leader_combat_detection_task, gui_task, potion_usage_loop_task, rpc_loop_task, drop_logging_loop_task, zone_check_loop_task, anti_afk_questing_loop_task, speed_task]
+		tasks: List[asyncio.Task] = [foreground_client_switching_task, combat_task, assign_foreground_clients_task, dialogue_task, sigil_task, questing_task, in_combat_loop_task, questing_leader_combat_detection_task, gui_task, potion_usage_loop_task, zone_check_loop_task, speed_task, tool_active_task]
 		for task in tasks:
 			if task is not None and not task.cancelled():
 				task.cancel()

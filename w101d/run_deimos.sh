@@ -251,6 +251,11 @@ echo "[run] WINEPREFIX : $WINEPREFIX  (~/.w101d_wine)"
 echo "[run] Mod        : $MODE"
 echo ""
 
+# FPS / performans: Wine debug output kapat, DXVK log kapat
+export WINEDEBUG="-all"
+export DXVK_LOG_LEVEL="none"
+export WINEESYNC=1
+
 case "$MODE" in
     deimos)
         echo "[run] Deimos başlatılıyor..."
