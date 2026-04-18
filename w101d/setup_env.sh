@@ -86,9 +86,10 @@ if ! ( [[ -f "$WIN_PYTHON" ]] && \
        WINEPREFIX="$WINEPREFIX" "$WINE_BIN" "$WIN_PYTHON" \
            -c "import sys, os; sys.exit(0)" &>/dev/null ); then
     _try_install "3.13.3" || \
-    _try_install "3.13.9" || {
-        echo "[setup] HATA: Python 3.13.3 ve 3.13.9 kurulumu başarısız." >&2
-        echo "[setup]       Wine 11.0'da NtLockFile hatası var." >&2
+    _try_install "3.13.9" || \
+    _try_install "3.12.10" || {
+        echo "[setup] HATA: Tüm Python sürümleri başarısız." >&2
+        echo "[setup]       Wine 11.0'da NtLockFile installer hatası var." >&2
         echo "[setup]       Çözüm: brew upgrade wine-stable" >&2
         exit 1
     }
