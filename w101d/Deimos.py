@@ -86,23 +86,22 @@ async def mac_is_potion_needed(client):
     return False
 
 async def mac_auto_potions(client, buy=None):
-    if buy is None:
-        buy = getattr(client, "buy_potions", True)
-    logger.info(f"{client.title} - Otomatik İksir Molası (Quest/Sigil)! Konuma MARK atılıyor...")
+    count = getattr(client, "mac_battle_count", 0)
+    logger.info(f"{client.title} - 3 savaş tamamlandı (sayaç:{count}), iksir kullanılıyor...")
     try:
-        await _orig_auto_potions(client, buy=buy)
+        # buy=False: dükkan navigasyonu yapma (crash riski)
+        await _orig_auto_potions(client, buy=False)
+        logger.info(f"{client.title} - İksir kullanıldı.")
     except Exception as e:
-        logger.debug(f"{client.title} - Mac Auto Potion (Bypass) devrede. Hata atlandı.")
-    logger.success(f"{client.title} - İksir işlemi tamamlandı! Mark noktasına geri dönüldü.")
+        logger.debug(f"{client.title} - auto_potions hata ({e}), atlandı.")
     client.mac_battle_count = 0
 
 async def mac_auto_potions_force_buy(client, buy=True):
-    logger.info(f"{client.title} - Zorunlu İksir Alımı (Refill) Başlatıldı! Mark atılıyor...")
+    logger.info(f"{client.title} - Force potion (buy=False ile çalışıyor)...")
     try:
-        await _orig_auto_potions_force_buy(client, buy)
+        await _orig_auto_potions_force_buy(client, False)
     except Exception as e:
-        logger.debug(f"{client.title} - Mac Force Buy (Bypass) devrede. Hata atlandı.")
-    logger.success(f"{client.title} - Refill Potions işlemi bitti. Eski konuma dönüldü.")
+        logger.debug(f"{client.title} - force_buy hata ({e}), atlandı.")
     client.mac_battle_count = 0
 
 src.utils.is_potion_needed = mac_is_potion_needed
