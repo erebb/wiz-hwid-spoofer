@@ -251,13 +251,11 @@ echo "[run] WINEPREFIX : $WINEPREFIX  (~/.w101d_wine)"
 echo "[run] Mod        : $MODE"
 echo ""
 
-# FPS / performans: Wine + MoltenVK debug output kapat
+# FPS / performans: Wine debug output kapat, DXVK log kapat
 export WINEDEBUG="-all"
 export DXVK_LOG_LEVEL="none"
 export WINEESYNC=1
 export WINEMSYNC=1
-export MVK_CONFIG_LOG_LEVEL=0
-export MVK_CONFIG_DEBUG_MODE=0
 
 case "$MODE" in
     deimos)
