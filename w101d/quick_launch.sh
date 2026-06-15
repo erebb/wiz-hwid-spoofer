@@ -225,7 +225,28 @@ echo "[QuickLaunch] Oyun başlatılıyor..."
 echo "[QuickLaunch] (İlk 10 saniye Wine çıktısı aşağıda görünür — normal)"
 echo ""
 
-export DXVK_FRAME_RATE=60
+# ── Performans / FPS (macOS Wine + DXVK + MoltenVK) ──────────────────────────
+export DXVK_FRAME_RATE=60          # FPS cap — ısı + stabil frametime (kullanıcı tercihi)
+export WINEDEBUG="-all"            # Wine debug spam kapat → CPU tasarrufu
+export DXVK_LOG_LEVEL="none"       # DXVK log kapat
+export WINEESYNC=1                 # esync — run_deimos.sh ile tutarlı, CPU sync yükü az
+export WINEMSYNC=1                 # msync — thread senkron performansı
+export WINE_LARGE_ADDRESS_AWARE=1  # 32-bit oyun client'ı >2GB RAM kullanabilsin
+
+# DXVK shader/state cache kalıcı → her açılışta yeniden derlenmez (stutter azalır)
+export DXVK_STATE_CACHE=1
+export DXVK_STATE_CACHE_PATH="$HOME/.w101d_cache/dxvk_cache"
+mkdir -p "$DXVK_STATE_CACHE_PATH"
+
+# Frame latency düşür → input gecikmesi az, daha akıcı (DX9 = d3d9.*)
+_DXVK_CONF="$HOME/.w101d_cache/dxvk.conf"
+if [[ ! -f "$_DXVK_CONF" ]]; then
+    cat > "$_DXVK_CONF" << 'DXVKCONF'
+d3d9.maxFrameLatency = 1
+dxgi.maxFrameLatency = 1
+DXVKCONF
+fi
+export DXVK_CONFIG_FILE="$_DXVK_CONF"
 
 cd "$WIZ_BIN_DIR"
 # Doğru arg formatı (umbra-launcher + MidasModLoader referansına göre):
