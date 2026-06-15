@@ -116,39 +116,33 @@ if hasattr(src.questing, "is_potion_needed"): src.questing.is_potion_needed = ma
 if hasattr(src.questing, "auto_potions"): src.questing.auto_potions = mac_auto_potions
 if hasattr(src.questing, "auto_potions_force_buy"): src.questing.auto_potions_force_buy = mac_auto_potions_force_buy
 
-# 6. TELEPORT TIMEOUT BYPASS — maybe_wait_for_value_with_timeout + body.write_position
-# _teleport_object içinde wait_on_inuse parametresi kontrol edilmeyebilir.
-# maybe_wait_for_value_with_timeout'u bypass + doğrudan body yazma ile çözüyoruz.
+# 6. TELEPORT TIMEOUT BYPASS — sadece should_update beklemesini atla
 import wizwalker.utils as _ww_utils
 from wizwalker.client import Client as _WClient
 
-# 6a. maybe_wait_for_value_with_timeout → anında return (should_update timeout yok)
+# 6a. maybe_wait_for_value_with_timeout → sadece should_update için anında return
+# Diğer wait'lere (zone load, in_battle, vs.) dokunma — loading ekranı sıkışır
 _orig_maybe_wait = _ww_utils.maybe_wait_for_value_with_timeout
-async def _instant_wait(coro_func, *args, **kwargs):
-    try:
-        return await coro_func()
-    except Exception:
+async def _selective_wait(coro_func, *args, **kwargs):
+    name = getattr(coro_func, '__name__', '') or ''
+    if 'should_update' in name:
+        logger.debug("[macOS] should_update atlandı (selective bypass)")
         return True
-_ww_utils.maybe_wait_for_value_with_timeout = _instant_wait
-logger.debug("[macOS] maybe_wait_for_value_with_timeout bypass aktif")
+    return await _orig_maybe_wait(coro_func, *args, **kwargs)
+_ww_utils.maybe_wait_for_value_with_timeout = _selective_wait
+logger.debug("[macOS] should_update bypass aktif (diğer wait'ler korunuyor)")
 
-# 6b. Client.teleport → body.write_position ile direkt yaz (timeout riski yok)
+# 6b. Client.teleport → wait_on_inuse=False (nav mesh hesabına dokunma)
+# body.write_position kullanmıyoruz — navmap_tp nav mesh pozisyonunu hesaplar,
+# teleport sadece should_update beklemesini atlar
 _orig_teleport = _WClient.teleport
-async def _teleport_direct(self, xyz, yaw=None, **kwargs):
+async def _teleport_nowait(self, xyz, yaw=None, wait_on_inuse=True, **kwargs):
     try:
-        await self.body.write_position(xyz)
-        if yaw is not None:
-            try: await self.body.write_yaw(yaw)
-            except Exception: pass
-        logger.debug(f"[macOS] direct teleport OK: {xyz}")
+        await _orig_teleport(self, xyz, yaw=yaw, wait_on_inuse=False, **kwargs)
     except Exception as _te:
-        logger.warning(f"[macOS] direct teleport HATA ({_te}), orijinal deneniyor...")
-        try:
-            await _orig_teleport(self, xyz, yaw=yaw, wait_on_inuse=False, **kwargs)
-        except Exception as _te2:
-            logger.error(f"[macOS] teleport kesin HATA: {_te2}")
-_WClient.teleport = _teleport_direct
-logger.debug("[macOS] Client.teleport direct body write patch aktif")
+        logger.warning(f"[macOS] teleport HATA ({_te})")
+_WClient.teleport = _teleport_nowait
+logger.debug("[macOS] Client.teleport wait_on_inuse=False patch aktif")
 
 # =====================================================================
 
