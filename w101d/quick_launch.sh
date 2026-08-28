@@ -226,27 +226,43 @@ echo "[QuickLaunch] (İlk 10 saniye Wine çıktısı aşağıda görünür — n
 echo ""
 
 # ── Performans / FPS (macOS Wine + DXVK + MoltenVK) ──────────────────────────
-export DXVK_FRAME_RATE=60          # FPS cap — ısı + stabil frametime (kullanıcı tercihi)
+# ÖNEMLİ: DXVK_* değişkenleri yalnızca prefix'e DXVK kuruluysa çalışır.
+# Kurulu değilse render wined3d (D3D9→OpenGL) üzerinden gider ve hepsi
+# sessizce yok sayılır. Kontrol: bash w101d/gfx_check.sh
 export WINEDEBUG="-all"            # Wine debug spam kapat → CPU tasarrufu
 export DXVK_LOG_LEVEL="none"       # DXVK log kapat
-export WINEESYNC=1                 # esync — run_deimos.sh ile tutarlı, CPU sync yükü az
-export WINEMSYNC=1                 # msync — thread senkron performansı
-export WINE_LARGE_ADDRESS_AWARE=1  # 32-bit oyun client'ı >2GB RAM kullanabilsin
+export DXVK_FRAME_RATE=60          # FPS cap (DXVK <3.0). 3.0'da kaldırıldı →
+                                   # dxvk.conf'taki d3d9.maxFrameRate devralıyor.
 
 # DXVK shader/state cache kalıcı → her açılışta yeniden derlenmez (stutter azalır)
+# DXVK_STATE_CACHE: <=2.6.1 · DXVK_SHADER_CACHE_PATH: 3.x (3.x'te cache zaten açık)
 export DXVK_STATE_CACHE=1
 export DXVK_STATE_CACHE_PATH="$HOME/.w101d_cache/dxvk_cache"
+export DXVK_SHADER_CACHE_PATH="$HOME/.w101d_cache/dxvk_cache"
 mkdir -p "$DXVK_STATE_CACHE_PATH"
 
+# MoltenVK: log kapat + shader derlemeyi paralelleştir (macOS 13.3+).
+# NOT: FAST_MATH ve USE_METAL_ARGUMENT_BUFFERS zaten varsayılan olarak açık,
+#      PREFILL_METAL_COMMAND_BUFFERS'ın varsayılanı (0) zaten en hızlısı →
+#      hiçbiri set edilmiyor, set etmek görsel bozulma riski getirirdi.
+export MVK_CONFIG_LOG_LEVEL=0
+export MVK_CONFIG_SHOULD_MAXIMIZE_CONCURRENT_COMPILATION=1
+
 # Frame latency düşür → input gecikmesi az, daha akıcı (DX9 = d3d9.*)
+# dxgi.* AYARLARI EKLENMEZ: DXGI D3D10/11/12'ye ait, Wizard101 saf D3D9.
 _DXVK_CONF="$HOME/.w101d_cache/dxvk.conf"
-if [[ ! -f "$_DXVK_CONF" ]]; then
+if [[ ! -f "$_DXVK_CONF" ]] || ! grep -q "maxFrameRate" "$_DXVK_CONF" 2>/dev/null; then
     cat > "$_DXVK_CONF" << 'DXVKCONF'
+# Wizard101 (D3D9). Sürüme göre bazı satırlar yok sayılır — zararsız.
 d3d9.maxFrameLatency = 1
-dxgi.maxFrameLatency = 1
+d3d9.maxFrameRate = 60
 DXVKCONF
 fi
 export DXVK_CONFIG_FILE="$_DXVK_CONF"
+
+# NOT: WINEESYNC / WINEMSYNC / WINE_LARGE_ADDRESS_AWARE stok Homebrew
+# wine-stable'da MEVCUT DEĞİL (Proton/Lutris/CrossOver yamalarına ait) →
+# bilerek kaldırıldı. msync istiyorsan Whisky / CrossOver / wine-crossover gerekir.
 
 # ── Render çözünürlüğü (-SR) ─────────────────────────────────────────────────
 # WizardGraphicalClient.exe'nin string dump'ından doğrulanmış argüman:
