@@ -248,11 +248,28 @@ DXVKCONF
 fi
 export DXVK_CONFIG_FILE="$_DXVK_CONF"
 
+# ── Render çözünürlüğü (-SR) ─────────────────────────────────────────────────
+# WizardGraphicalClient.exe'nin string dump'ından doğrulanmış argüman:
+#   -SR <screen resolution>   i.e. 1280x1024
+# Oyunun grafik panelinde shadows/particle gibi ayarlar YOK; render
+# çözünürlüğünü düşürmek FPS için elimizdeki tek gerçek oyun-içi kaldıraç.
+# Kullanım:  WIZ_RES=1280x720 bash quick_launch.sh     (kapatmak için: WIZ_RES=off)
+_SR_OPT=""
+if [[ -n "${WIZ_RES:-}" && "${WIZ_RES}" != "off" ]]; then
+    _SR_OPT="-SR ${WIZ_RES}"
+    echo "[QuickLaunch] Render   : $WIZ_RES (-SR)"
+else
+    echo "[QuickLaunch] Render   : oyunun kayıtlı çözünürlüğü"
+    echo "               FPS için düşür:  WIZ_RES=1280x720 bash quick_launch.sh"
+fi
+
 cd "$WIZ_BIN_DIR"
 # Doğru arg formatı (umbra-launcher + MidasModLoader referansına göre):
 #   -L <host> <port> -U ..<uid> <ck2> <username>
 # NOT: -u/-p değil, önce token alıp -U ile geçilmeli
+# shellcheck disable=SC2086  # _SR_OPT kasıtlı olarak word-split ediliyor
 "$WINE_BIN" WizardGraphicalClient.exe \
+    $_SR_OPT \
     -L login.us.wizard101.com 12000 \
     -U "..$WIZ_UID" "$WIZ_CK2" "$WIZ_USER" \
     2>&1 | head -40 &
