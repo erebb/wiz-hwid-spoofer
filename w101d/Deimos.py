@@ -868,33 +868,89 @@ async def main():
 		await asyncio.gather(*[async_questing(p) for p in walker.clients])
 
 	async def anti_afk_questing_loop():
+		# macOS: takılma tespiti — 60 saniyelik pencerede 15 saniyede bir örnekle.
+		# Eski sürüm 120 sn bekleyip tek karşılaştırma yapıyordu; bu sürüm daha
+		# hızlı yakalar ve yükleme ekranı / diyalog gibi meşru beklemeleri
+		# "takıldı" saymaz.
+		STUCK_SAMPLE_SECONDS = 15
+		STUCK_SAMPLE_COUNT = 4          # 4 x 15 = 60 saniye
+		STUCK_MIN_DISTANCE = 5.0
+		RESTART_COOLDOWN = 90.0         # iki restart arası en az bu kadar beklenir
+		last_restart = [0.0]            # tüm client task'leri paylaşır
+
+		async def _client_is_busy(client: Client) -> bool:
+			# Takılma sayılmaması gereken meşru durumlar
+			try:
+				if await client.in_battle():
+					return True
+			except Exception:
+				return True
+			if client.feeding_pet_status or client.entity_detect_combat_status:
+				return True
+			try:
+				if await client.is_loading():
+					return True
+			except Exception:
+				pass
+			return False
+
 		async def async_afk_questing(client: Client):
 			while True:
 				global questing_task
 
-				await asyncio.sleep(0.1)
-				if not freecam_status:
-					client_xyz = await client.body.position()
-					await asyncio.sleep(120)
-					client_xyz_2 = await client.body.position()
-					distance_moved = calc_Distance(client_xyz, client_xyz_2)
-					if distance_moved < 5.0 and not await client.in_battle() and not client.feeding_pet_status and not client.entity_detect_combat_status:
+				await asyncio.sleep(1.0)
+				if freecam_status or not questing_status:
+					continue
 
-						# During questing, one or more clients may be waiting outside while the others are completing a solo zone quest - we do not want to restart in these cases
-						client_in_solo_zone = False
-						for p in walker.clients:
-							if p.in_solo_zone:
-								client_in_solo_zone = True
+				try:
+					last_xyz = await client.body.position()
+				except Exception:
+					continue
 
-						# restart questing
-						if questing_task is not None and not questing_task.cancelled() and not client_in_solo_zone:
-								logger.debug(f'Questing appears to have halted - restarting.')
-								questing_task.cancel()
-								questing_task = None
-								await asyncio.sleep(1.0)
+				stuck = True
+				for _ in range(STUCK_SAMPLE_COUNT):
+					await asyncio.sleep(STUCK_SAMPLE_SECONDS)
+					if freecam_status or not questing_status:
+						stuck = False
+						break
+					try:
+						now_xyz = await client.body.position()
+					except Exception:
+						stuck = False
+						break
+					if calc_Distance(last_xyz, now_xyz) >= STUCK_MIN_DISTANCE:
+						stuck = False
+						break
+					last_xyz = now_xyz
 
-								if questing_task is None:
-									questing_task = asyncio.create_task(try_task_coro(questing_loop, walker.clients, True))
+				if not stuck:
+					continue
+				if await _client_is_busy(client):
+					continue
+
+				# During questing, one or more clients may be waiting outside while the others are completing a solo zone quest - we do not want to restart in these cases
+				client_in_solo_zone = any(p.in_solo_zone for p in walker.clients)
+				if client_in_solo_zone:
+					logger.debug(f'{client.title} - Hareketsiz ama başka client solo zone\'da, restart atlanıyor.')
+					continue
+
+				now = time.time()
+				if now - last_restart[0] < RESTART_COOLDOWN:
+					continue
+
+				# restart questing
+				if questing_task is not None and not questing_task.cancelled():
+					last_restart[0] = now
+					logger.debug(
+						f'{client.title} - Questing takıldı ({STUCK_SAMPLE_SECONDS * STUCK_SAMPLE_COUNT} sn '
+						f'boyunca {STUCK_MIN_DISTANCE} birimden az hareket, pozisyon {last_xyz}) - yeniden başlatılıyor.'
+					)
+					questing_task.cancel()
+					questing_task = None
+					await asyncio.sleep(1.0)
+
+					if questing_task is None:
+						questing_task = asyncio.create_task(try_task_coro(questing_loop, walker.clients, True))
 
 
 		await asyncio.gather(*[async_afk_questing(p) for p in walker.clients])
